@@ -1,0 +1,12 @@
+Modificar no app.p do lookforsimilar para que o host seja ulyssesdb qnd for rodar no docker e reloader ser False.
+Para rodar local com o conda, host é localhost e reloader é True
+Banco de dados esta lotado de solicitacoes duplicadas - nao tem afetado desempenho. Se desejado, limpar banco de dados antes
+
+Para rodar pelo docker, siga as instruções em https://github.com/LFRusso/BuscaDoc/tree/improve-similarity
+
+Funciona completamente com o db carregado pelo Docker e restante das funcionalidades em local.
+
+Para insercao de sts, usar endpoint 5000/insert-forced-sts e inseris texto do solicitacoes.csv, sem a virgula inicial
+
+
+
