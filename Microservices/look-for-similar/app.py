@@ -10,6 +10,10 @@ from numpy import transpose, array
 from bm25 import BM25L
 from preprocessing import preprocess
 
+import sys
+import base64
+from cryptography.fernet import Fernet
+
 SELECT_CORPUS_FIELDS = "SELECT code, name, txt_ementa FROM corpus;"
 SELECT_ST_FIELDS = "SELECT name, text, text_preprocessed FROM solicitacoes;"
 SELECT_CORPUS = "SELECT text_preprocessed FROM corpus;"
@@ -31,31 +35,34 @@ app = Flask(__name__)
 def load_corpus(con):
     with con.cursor() as cursor:
         cursor.execute(SELECT_CORPUS_FIELDS)
-        try:
-            (codes, names, ementas) = (array(x) for x in transpose( cursor.fetchall() ))
-            
-            cursor.execute(SELECT_CORPUS)
-            tokenized_corpus = cursor.fetchall()
-            tokenized_corpus = ["[" + entry[0][1:-1] + "]" for entry in tokenized_corpus]
-        except:
-            (codes, names, ementas, tokenized_corpus) = [],[],[],[]
+        (codes, names, ementas) = (array(x) for x in transpose( cursor.fetchall() ))
 
+        cursor.execute(SELECT_CORPUS)
+        tokenized_corpus = cursor.fetchall()
+        tokenized_corpus = ["[" + entry[0][1:-1] + "]" for entry in tokenized_corpus]
         tokenized_corpus = [literal_eval(i) for i in tokenized_corpus]
 
     print("Loaded", len(names), "documents")
     return (codes, names, ementas, tokenized_corpus)
 
 def load_solicitacoes(con):
+    # TODO buscar cript_key de um arquivo de configuração
+    crypt_key = "BASE64=="
+    net = Fernet(crypt_key.encode()) if crypt_key else None
+
     with con.cursor() as cursor:
         cursor.execute(SELECT_ST_FIELDS)
-        try:
-            (names, texts, tokenized_sts) = (array(x) for x in transpose( cursor.fetchall() ))
-            
-            #cursor.execute(SELECT_ST)
-            #tokenized_sts = cursor.fetchall()
-            #tokenized_sts = ["[" + entry[0][1:-1] + "]" for entry in tokenized_sts]
-        except:
-            (names, texts, tokenized_sts) = [],[],[]
+        (names, texts, tokenized_sts) = [], [], []
+        for name, text, tokenized_st in cursor:
+            text_plain = net.decrypt(base64.b64decode(text)).decode() if net else text
+            tokenized_st_plain = net.decrypt(base64.b64decode(tokenized_st)).decode() if net else tokenized_st
+            names.append(name)
+            texts.append(text_plain)
+            tokenized_sts.append(tokenized_st_plain)
+
+        #cursor.execute(SELECT_ST)
+        #tokenized_sts = cursor.fetchall()
+        #tokenized_sts = ["[" + entry[0][1:-1] + "]" for entry in tokenized_sts]
 
         #tokenized_sts = [literal_eval(i) for i in tokenized_sts]
 
@@ -82,13 +89,10 @@ except:
 print("===IT'S ALIVE!===")
 
 def getPastFeedback(con):
-    try:
-        with con.cursor() as cur:
-            cur.execute("SELECT query, user_feedback FROM feedback;")
-            (queries, feedbacks) = transpose(cur.fetchall())
-        feedbacks = [literal_eval(i) for i in feedbacks]
-    except:
-        queries, feedbacks = [], []
+    with con.cursor() as cur:
+        cur.execute("SELECT query, user_feedback FROM feedback;")
+        (queries, feedbacks) = transpose(cur.fetchall())
+    feedbacks = [literal_eval(i) for i in feedbacks]
 
     scores = []
     all_queries = []
@@ -326,5 +330,4 @@ def insertForcesDocs():
 
 
 if __name__=="__main__":
-    ### mudar use_reload para False ###
-    app.run(host="0.0.0.0", debug=True, use_reloader=True, port=5000)
+    app.run(host="0.0.0.0", debug=True, use_reloader=False, port=5000)
