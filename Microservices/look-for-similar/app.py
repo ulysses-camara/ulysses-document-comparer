@@ -64,6 +64,8 @@ def load_solicitacoes(con):
         #tokenized_sts = cursor.fetchall()
         #tokenized_sts = ["[" + entry[0][1:-1] + "]" for entry in tokenized_sts]
 
+        (names, texts, tokenized_sts) = (array(names), array(texts), array(tokenized_sts))
+
         #tokenized_sts = [literal_eval(i) for i in tokenized_sts]
 
     print("Loaded", len(names), "Solicitações de Trabalho")
