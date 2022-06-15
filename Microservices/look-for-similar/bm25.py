@@ -182,7 +182,7 @@ class BM25L(BM25):
             scores_normalized = (scores - np.min(scores)) / (np.max(scores) - np.min(scores))
 
         scores_final = scores_normalized
-        if (improve_similarity):
+        if (improve_similarity and len(past_queries) > 0):
             lambdas = self._lambda_calc(all_queries=past_queries, retrieved_docs=retrieved_docs,
                                     query=raw_query, cut=cut, delta=delta)
             scores_final = self._lambda_update(scores=scores_normalized, lambdas=lambdas, names=names)

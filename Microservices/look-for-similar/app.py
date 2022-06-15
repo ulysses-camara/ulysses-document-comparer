@@ -15,7 +15,7 @@ import base64
 from cryptography.fernet import Fernet
 
 SELECT_CORPUS = "SELECT code, name, txt_ementa, text_preprocessed FROM corpus;"
-SELECT_ST_FIELDS = "SELECT name, text, text_preprocessed FROM solicitacoes;"
+SELECT_ST_FIELDS = "SELECT code, name, text, text_preprocessed FROM solicitacoes;"
 INSERT_DATA_CORPUS = "INSERT INTO corpus (code, name, txt_ementa, text, text_preprocessed) VALUES ('{}','{}','{}','{}','{}');"
 SELECT_ROOT_BY_PROPOSICAO = "SELECT cod_proposicao_raiz FROM arvore_proposicoes WHERE cod_proposicao = {}"
 SELECT_AVORE_BY_RAIZ = "SELECT * FROM arvore_proposicoes WHERE cod_proposicao_raiz IN {}"
@@ -52,24 +52,25 @@ def load_solicitacoes(con):
 
     with con.cursor() as cursor:
         cursor.execute(SELECT_ST_FIELDS)
-        (names, texts, tokenized_sts) = [], [], []
-        for name, text, tokenized_st in cursor:
+        (codes, names, texts, tokenized_sts) = [], [], [], []
+        for code, name, text, tokenized_st in cursor:
             text_plain = net.decrypt(base64.b64decode(text)).decode() if net else text
             tokenized_st_plain = net.decrypt(base64.b64decode(tokenized_st)).decode() if net else tokenized_st
+            codes.append(code)
             names.append(name)
             texts.append(text_plain)
             tokenized_sts.append(literal_eval(tokenized_st_plain))
 
-        (names, texts) = (array(names), array(texts))
+        (codes, names, texts) = (array(codes), array(names), array(texts))
 
     print("Loaded", len(names), "Solicitações de Trabalho")
-    return (names, texts, tokenized_sts)
+    return (codes, names, texts, tokenized_sts)
 
 
 # Loading data
 print("Loading corpus...")
 (codes, names, ementas, tokenized_corpus) = load_corpus(connection)
-(names_sts, texto_sts, tokenized_sts) = load_solicitacoes(connection)
+(codes_sts, names_sts, texto_sts, tokenized_sts) = load_solicitacoes(connection)
 
 # Loading model with dataset
 model = BM25L(tokenized_corpus)
@@ -79,8 +80,10 @@ print("Modelos carregados com sucesso")
 def getPastFeedback(con):
     with con.cursor() as cur:
         cur.execute("SELECT query, user_feedback FROM feedback;")
-        (queries, feedbacks) = transpose(cur.fetchall())
-    feedbacks = [literal_eval(i) for i in feedbacks]
+        (queries, feedbacks) = [], []
+        for query, feedback in cur:
+            queries.append(query)
+            feedbacks.append(literal_eval(feedback))
 
     scores = []
     all_queries = []
@@ -119,8 +122,9 @@ def retrieveSTs(query, n, raw_query, improve_similarity, con):
 
     selected_sts = texto_sts[slice_indexes]
     selected_names = names_sts[slice_indexes]
+    selected_codes = codes_sts[slice_indexes]
 
-    return selected_names, selected_sts, scores, scores_normalized, scores_final
+    return selected_codes, selected_names, selected_sts, scores, scores_normalized, scores_final
 
 
 def getRelationsFromTree(retrieved_doc):
@@ -189,11 +193,11 @@ def lookForSimilar(use_relations_tree = False):
     preprocessed_query = preprocess(query)
 
     # Recuperando das solicitações de trabalho
-    selected_names_sts, selected_sts, scores_sts, scores_sts_normalized, scores_sts_final = retrieveSTs(preprocessed_query, k_st,
+    selected_codes_sts, selected_names_sts, selected_sts, scores_sts, scores_sts_normalized, scores_sts_final = retrieveSTs(preprocessed_query, k_st,
                                                                                     improve_similarity=improve_similarity, raw_query=query, con=connection)
     resp_results_sts = list()
     for i  in range(k_st):
-        resp_results_sts.append({"name": selected_names_sts[i], "texto": selected_sts[i].strip(), 
+        resp_results_sts.append({"id": int(selected_codes_sts[i]), "name": selected_names_sts[i], "texto": selected_sts[i].strip(),
                     "score": scores_sts[i], "score_normalized": scores_sts_normalized[i],
                     "score_final": scores_sts_final[i], "tipo": "ST"})
     
