@@ -1,3 +1,4 @@
+import os
 from ast import literal_eval
 import json
 import requests
@@ -10,14 +11,11 @@ from numpy import transpose, array
 from bm25 import BM25L
 from preprocessing import preprocess
 
-import sys
 import base64
 from cryptography.fernet import Fernet
 
-SELECT_CORPUS_FIELDS = "SELECT code, name, txt_ementa FROM corpus;"
+SELECT_CORPUS = "SELECT code, name, txt_ementa, text_preprocessed FROM corpus;"
 SELECT_ST_FIELDS = "SELECT name, text, text_preprocessed FROM solicitacoes;"
-SELECT_CORPUS = "SELECT text_preprocessed FROM corpus;"
-SELECT_ST = "SELECT text_preprocessed FROM solicitacoes;"
 INSERT_DATA_CORPUS = "INSERT INTO corpus (code, name, txt_ementa, text, text_preprocessed) VALUES ('{}','{}','{}','{}','{}');"
 SELECT_ROOT_BY_PROPOSICAO = "SELECT cod_proposicao_raiz FROM arvore_proposicoes WHERE cod_proposicao = {}"
 SELECT_AVORE_BY_RAIZ = "SELECT * FROM arvore_proposicoes WHERE cod_proposicao_raiz IN {}"
@@ -29,25 +27,27 @@ teste2 = "('{}','{}','{}')"
 session = requests.Session()
 session.trust_env = False
 ## retrocar ulyssesdb de localhost #####
-connection = psycopg2.connect(host="localhost", database="admin",user="admin", password="admin", port=5432)
+crypt_key = os.getenv('CRYPT_KEY_SOLIC_TRAB', default='')
+db_connection = os.getenv('ULYSSES_DB_CONNECTION', default='host=localhost dbname=admin user=admin password=admin port=5432')
+connection = psycopg2.connect(db_connection)
 app = Flask(__name__)
 
 def load_corpus(con):
     with con.cursor() as cursor:
-        cursor.execute(SELECT_CORPUS_FIELDS)
-        (codes, names, ementas) = (array(x) for x in transpose( cursor.fetchall() ))
-
         cursor.execute(SELECT_CORPUS)
-        tokenized_corpus = cursor.fetchall()
-        tokenized_corpus = ["[" + entry[0][1:-1] + "]" for entry in tokenized_corpus]
-        tokenized_corpus = [literal_eval(i) for i in tokenized_corpus]
+        (codes, names, ementas, tokenized_corpus) = [], [], [], []
+        for code, name, ementa, text_preprocessed in cursor:
+            codes.append(code)
+            names.append(name)
+            ementas.append(ementa)
+            tokenized_corpus.append(literal_eval(text_preprocessed))
+        (codes, names, ementas) = (array(codes), array(names), array(ementas))
 
     print("Loaded", len(names), "documents")
     return (codes, names, ementas, tokenized_corpus)
 
 def load_solicitacoes(con):
-    # TODO buscar cript_key de um arquivo de configuração
-    crypt_key = "BASE64=="
+    crypt_key = os.getenv('CRYPT_KEY_SOLIC_TRAB', default='')
     net = Fernet(crypt_key.encode()) if crypt_key else None
 
     with con.cursor() as cursor:
@@ -58,15 +58,9 @@ def load_solicitacoes(con):
             tokenized_st_plain = net.decrypt(base64.b64decode(tokenized_st)).decode() if net else tokenized_st
             names.append(name)
             texts.append(text_plain)
-            tokenized_sts.append(tokenized_st_plain)
+            tokenized_sts.append(literal_eval(tokenized_st_plain))
 
-        #cursor.execute(SELECT_ST)
-        #tokenized_sts = cursor.fetchall()
-        #tokenized_sts = ["[" + entry[0][1:-1] + "]" for entry in tokenized_sts]
-
-        (names, texts, tokenized_sts) = (array(names), array(texts), array(tokenized_sts))
-
-        #tokenized_sts = [literal_eval(i) for i in tokenized_sts]
+        (names, texts) = (array(names), array(texts))
 
     print("Loaded", len(names), "Solicitações de Trabalho")
     return (names, texts, tokenized_sts)
@@ -78,17 +72,9 @@ print("Loading corpus...")
 (names_sts, texto_sts, tokenized_sts) = load_solicitacoes(connection)
 
 # Loading model with dataset
-try:
-    model = BM25L(tokenized_corpus)
-except:
-    model = None
-
-try:
-    model_st = BM25L(tokenized_sts)
-except:
-    model_st = None
-
-print("===IT'S ALIVE!===")
+model = BM25L(tokenized_corpus)
+model_st = BM25L(tokenized_sts)
+print("Modelos carregados com sucesso")
 
 def getPastFeedback(con):
     with con.cursor() as cur:
@@ -106,7 +92,10 @@ def getPastFeedback(con):
 def retrieveDocuments(query, n, raw_query, improve_similarity, con):
     indexes = list(range(len(codes)))
 
-    past_queries, scores = getPastFeedback(con)
+    if improve_similarity:
+        past_queries, scores = getPastFeedback(con)
+    else:
+        past_queries, scores = None, None
     slice_indexes, scores, scores_normalized, scores_final = model.get_top_n(query, indexes, n=n, 
             improve_similarity=improve_similarity, raw_query= raw_query, past_queries=past_queries,
             retrieved_docs=scores, names=names)
@@ -120,8 +109,11 @@ def retrieveDocuments(query, n, raw_query, improve_similarity, con):
 def retrieveSTs(query, n, raw_query, improve_similarity, con):
     indexes = list(range(len(names_sts)))
 
-    past_queries, scores = getPastFeedback(con)
-    slice_indexes, scores, scores_normalized, scores_final = model_st.get_top_n(query, indexes, n=n, 
+    if improve_similarity:
+        past_queries, scores = getPastFeedback(con)
+    else:
+        past_queries, scores = None, None
+    slice_indexes, scores, scores_normalized, scores_final = model_st.get_top_n(query, indexes, n=n,
             improve_similarity=improve_similarity, raw_query= raw_query, past_queries=past_queries,
             retrieved_docs=scores, names=names_sts)
 
@@ -157,16 +149,19 @@ def lookForSimilar(use_relations_tree = False):
         return Response(status=500)
 
     args = request.json
-    print("model aqui - test" + str(model))
     try:
         query = args["text"]
     except:
         return ""
     try:
-        k = args["num_proposicoes"]
+        k_prop = args["num_proposicoes"]
     except:
-        k = 20
-    try: 
+        k_prop = 20
+    try:
+        k_st = args["num_solicitacoes"]
+    except:
+        k_st = 20
+    try:
         query_expansion = int(args["expansao"])
         if (query_expansion == 0):
             query_expansion = False
@@ -183,7 +178,9 @@ def lookForSimilar(use_relations_tree = False):
     except:
         improve_similarity = True   
 
-    k = min(k, len(codes), len(names_sts))
+    #k = min(k, len(codes), len(names_sts))
+    k_prop = min(k_prop, len(codes))
+    k_st = min(k_st, len(names_sts))
 
     if (query_expansion):
         resp = session.post("http://expand-query:5003", json={"query": query})
@@ -192,30 +189,33 @@ def lookForSimilar(use_relations_tree = False):
     preprocessed_query = preprocess(query)
 
     # Recuperando das solicitações de trabalho
-    selected_names_sts, selected_sts, scores_sts, scores_sts_normalized, scores_final = retrieveSTs(preprocessed_query, k,
+    selected_names_sts, selected_sts, scores_sts, scores_sts_normalized, scores_sts_final = retrieveSTs(preprocessed_query, k_st,
                                                                                     improve_similarity=improve_similarity, raw_query=query, con=connection)
     resp_results_sts = list()
-    for i  in range(k):
+    for i  in range(k_st):
         resp_results_sts.append({"name": selected_names_sts[i], "texto": selected_sts[i].strip(), 
-                    "score": scores_sts[i], "score_normalized": scores_sts_normalized[i], "score_final": scores_final[i], "tipo": "ST"})
+                    "score": scores_sts[i], "score_normalized": scores_sts_normalized[i],
+                    "score_final": scores_sts_final[i], "tipo": "ST"})
     
 
     # Recuperando do corpus das proposições
-    selected_codes, selected_ementas, selected_names, scores, scores_normalized, scores_final = retrieveDocuments(preprocessed_query, k, 
+    selected_codes, selected_ementas, selected_names, scores, scores_normalized, scores_final = retrieveDocuments(preprocessed_query, k_prop,
                                                                                     improve_similarity=improve_similarity, raw_query=query, con=connection)
     resp_results = list()
     if(use_relations_tree):
-        for i  in range(k):
+        for i in range(k_prop):
             # Propostas relacionadas pela árvore de proposições
             relations_tree = getRelationsFromTree(selected_codes[i])
-            resp_results.append({"id": selected_codes[i], "name": selected_names[i],  
-                        "texto": selected_ementas[i].strip(), "score": scores[i], "score_normalized": scores_normalized[i], 
-                        "tipo": "PR", "arvore": relations_tree})
+            resp_results.append({"id": int(selected_codes[i]), "name": selected_names[i],
+                        "texto": selected_ementas[i].strip(), "score": scores[i],
+                        "score_normalized": scores_normalized[i],
+                        "score_final": scores_final[i], "tipo": "PR", "arvore": relations_tree})
     else:
-        for i  in range(k):
-            resp_results.append({"id": selected_codes[i], "name": selected_names[i],  
-                        "texto": selected_ementas[i].strip(), "score": scores[i], "score_normalized": scores_normalized[i], 
-                        "tipo": "PR"})        
+        for i in range(k_prop):
+            resp_results.append({"id": int(selected_codes[i]), "name": selected_names[i],
+                        "texto": selected_ementas[i].strip(), "score": scores[i],
+                        "score_normalized": scores_normalized[i],
+                        "score_final": scores_final[i], "tipo": "PR"})
     
     response = {"proposicoes": resp_results, "solicitacoes": resp_results_sts}
     return jsonify(response)
