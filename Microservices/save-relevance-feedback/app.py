@@ -61,7 +61,10 @@ def registerScores():
                     cursor.execute(INSERT_ENTRY.format(sql_quote(query), sql_quote(json_results), sql_quote(json_extra_results), sql_quote(user_id)))
                     connection.commit()
                 except Exception as ex:
-                    connection.rollback()
+                    try:
+                        connection.rollback()
+                    except psycopg2.InterfaceError:
+                        pass
                     raise ex
             return Response(status=201)
         except Exception as ex:
