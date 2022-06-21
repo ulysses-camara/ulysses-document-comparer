@@ -133,13 +133,12 @@ class BM25L(BM25):
         """
         Updates bm25 scores using the lambdas values
         """
-
+        result = np.copy(scores)
         for i, name in enumerate(names):
             name = name.strip()
             if (name in lambdas.keys()):
-                scores[i] += lambdas[name]
-
-        return scores
+                result[i] += lambdas[name]
+        return result
 
     def _lambda_calc(self, all_queries, retrieved_docs, query, cut, delta):
         """
@@ -177,11 +176,11 @@ class BM25L(BM25):
         #scores = self.get_scores_cached(query) # Incluído por Cássio - usar esse caso cache tools instalado
         if np.isclose(np.max(scores), np.min(scores), atol=1e-5):
             score_ref = 1.0 if np.max(scores) > 1e-6 else 0.0
-            scores_normalized = [score_ref for i in range(len(scores))]
+            scores_normalized = np.array([score_ref for i in range(len(scores))])
         else:
             scores_normalized = (scores - np.min(scores)) / (np.max(scores) - np.min(scores))
 
-        scores_final = scores_normalized
+        scores_final = np.copy(scores_normalized)
         if (improve_similarity and len(past_queries) > 0):
             lambdas = self._lambda_calc(all_queries=past_queries, retrieved_docs=retrieved_docs,
                                     query=raw_query, cut=cut, delta=delta)

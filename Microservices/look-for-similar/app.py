@@ -15,7 +15,7 @@ import base64
 from cryptography.fernet import Fernet
 
 SELECT_CORPUS = "SELECT code, name, txt_ementa, text_preprocessed FROM corpus;"
-SELECT_ST_FIELDS = "SELECT code, name, text, text_preprocessed FROM solicitacoes;"
+SELECT_ST_FIELDS = "SELECT code, name, text, text_preprocessed FROM solicitacoes where length(name) > 1;"
 INSERT_DATA_CORPUS = "INSERT INTO corpus (code, name, txt_ementa, text, text_preprocessed) VALUES ('{}','{}','{}','{}','{}');"
 SELECT_ROOT_BY_PROPOSICAO = "SELECT cod_proposicao_raiz FROM arvore_proposicoes WHERE cod_proposicao = {}"
 SELECT_AVORE_BY_RAIZ = "SELECT * FROM arvore_proposicoes WHERE cod_proposicao_raiz IN {}"
@@ -28,6 +28,7 @@ session = requests.Session()
 session.trust_env = False
 ## retrocar ulyssesdb de localhost #####
 crypt_key = os.getenv('CRYPT_KEY_SOLIC_TRAB', default='')
+url_expand_query = os.getenv('URL_EXPAND_QUERY', default='http://expand-query:5003')
 db_connection = os.getenv('ULYSSES_DB_CONNECTION', default='host=localhost dbname=admin user=admin password=admin port=5432')
 connection = psycopg2.connect(db_connection)
 app = Flask(__name__)
@@ -99,7 +100,7 @@ def retrieveDocuments(query, n, raw_query, improve_similarity, con):
         past_queries, scores = getPastFeedback(con)
     else:
         past_queries, scores = None, None
-    slice_indexes, scores, scores_normalized, scores_final = model.get_top_n(query, indexes, n=n, 
+    slice_indexes, scores, scores_normalized, scores_final = model.get_top_n(query, indexes, n=n,
             improve_similarity=improve_similarity, raw_query= raw_query, past_queries=past_queries,
             retrieved_docs=scores, names=names)
 
@@ -131,27 +132,23 @@ def getRelationsFromTree(retrieved_doc):
     with connection.cursor() as cursor:
         cursor.execute(SELECT_ROOT_BY_PROPOSICAO.format(retrieved_doc))
         roots = cursor.fetchall()
-        
+
         # Considerando que documento seja uma raiz
         if (len(roots) == 0):
             roots.append((retrieved_doc,))
-        
+
         roots = [str(i[0]) for i in roots]
         cursor.execute(SELECT_AVORE_BY_RAIZ.format("(%s)" % ",".join(roots)))
         results = cursor.fetchall()
-        
+
         results = list(map(lambda x: {"numero_sequencia": x[0],"nivel": x[1],"cod_proposicao": x[2],
-                                     "cod_proposicao_referenciada": x[3],"cod_proposicao_raiz": x[4], 
+                                     "cod_proposicao_referenciada": x[3],"cod_proposicao_raiz": x[4],
                                      "tipo_referencia": x[5]}, results))
         return results
 
 
 @app.route('/', methods=["POST"])
 def lookForSimilar(use_relations_tree = False):
-    if (model == None):
-        print("caimos aqui - test")
-        return Response(status=500)
-
     args = request.json
     try:
         query = args["text"]
@@ -172,25 +169,32 @@ def lookForSimilar(use_relations_tree = False):
         else:
             query_expansion = True
     except:
-        query_expansion = True     
-    try: 
+        query_expansion = True
+    try:
         improve_similarity = int(args["improve-similarity"])
         if (improve_similarity == 0):
             improve_similarity = False
         else:
             improve_similarity = True
     except:
-        improve_similarity = True   
+        improve_similarity = True
 
-    #k = min(k, len(codes), len(names_sts))
     k_prop = min(k_prop, len(codes))
     k_st = min(k_st, len(names_sts))
 
     if (query_expansion):
-        resp = session.post("http://expand-query:5003", json={"query": query})
+        resp = session.post(url_expand_query, json={"query": query})
         if (resp.status_code == 200):
             query = json.loads(resp.content)["query"]
     preprocessed_query = preprocess(query)
+
+    # Refazer conexão com banco de dados quando necessário (ex: após a conexão tiver sido abortada/invalidada)
+    global connection
+    if improve_similarity or use_relations_tree:
+        try:
+            connection.isolation_level
+        except psycopg2.OperationalError:
+            connection = psycopg2.connect(db_connection)
 
     # Recuperando das solicitações de trabalho
     selected_codes_sts, selected_names_sts, selected_sts, scores_sts, scores_sts_normalized, scores_sts_final = retrieveSTs(preprocessed_query, k_st,
@@ -200,7 +204,7 @@ def lookForSimilar(use_relations_tree = False):
         resp_results_sts.append({"id": int(selected_codes_sts[i]), "name": selected_names_sts[i], "texto": selected_sts[i].strip(),
                     "score": scores_sts[i], "score_normalized": scores_sts_normalized[i],
                     "score_final": scores_sts_final[i], "tipo": "ST"})
-    
+
 
     # Recuperando do corpus das proposições
     selected_codes, selected_ementas, selected_names, scores, scores_normalized, scores_final = retrieveDocuments(preprocessed_query, k_prop,
@@ -220,8 +224,8 @@ def lookForSimilar(use_relations_tree = False):
                         "texto": selected_ementas[i].strip(), "score": scores[i],
                         "score_normalized": scores_normalized[i],
                         "score_final": scores_final[i], "tipo": "PR"})
-    
-    response = {"proposicoes": resp_results, "solicitacoes": resp_results_sts}
+
+    response = {"proposicoes": resp_results, "solicitacoes": resp_results_sts, "actual_query": query}
     return jsonify(response)
 
 
@@ -230,11 +234,11 @@ def insertDocs():
     content = request.data.decode("utf-8")
     io = StringIO(content)
     reader = csv.reader(io, delimiter=',')
-    
+
     data = [row for row in reader]
     columns = data[0]
     data = data[1:]
-    
+
     try:
         idx_text = columns.index("text")
         idx_ementa = columns.index("txt_ementa")
@@ -288,7 +292,7 @@ def insertForcesDocs():
         text_preprocessed = data[idx_text_preprocessed]
         text_preprocessed = [word.replace("'",'"') for word in text_preprocessed]
 
-        
+
         data_insert = transpose([name, text, text_preprocessed])
 
         command = INSERT_DATA_ST_teste
@@ -299,7 +303,7 @@ def insertForcesDocs():
             command = command + '(' + "'" + data[0] + "'" + ',' + "'" + data[1] + "'" + ',' + "'" + data[2] + "'" + ')'
             if (flag == False):
                 flag = True
-            
+
         command = command + ';'
         '''
         i = 0
