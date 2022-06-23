@@ -30,62 +30,72 @@ session.trust_env = False
 crypt_key = os.getenv('CRYPT_KEY_SOLIC_TRAB', default='')
 url_expand_query = os.getenv('URL_EXPAND_QUERY', default='http://expand-query:5003')
 db_connection = os.getenv('ULYSSES_DB_CONNECTION', default='host=localhost dbname=admin user=admin password=admin port=5432')
-connection = psycopg2.connect(db_connection)
 app = Flask(__name__)
 
-def load_corpus(con):
-    with con.cursor() as cursor:
-        cursor.execute(SELECT_CORPUS)
-        (codes, names, ementas, tokenized_corpus) = [], [], [], []
-        for code, name, ementa, text_preprocessed in cursor:
-            codes.append(code)
-            names.append(name)
-            ementas.append(ementa)
-            tokenized_corpus.append(literal_eval(text_preprocessed))
-        (codes, names, ementas) = (array(codes), array(names), array(ementas))
-
+def load_corpus(db_connection):
+    conn = psycopg2.connect(db_connection)
+    try:
+        with conn:
+            with conn.cursor() as cursor:
+                cursor.execute(SELECT_CORPUS)
+                (codes, names, ementas, tokenized_corpus) = [], [], [], []
+                for code, name, ementa, text_preprocessed in cursor:
+                    codes.append(code)
+                    names.append(name)
+                    ementas.append(ementa)
+                    tokenized_corpus.append(literal_eval(text_preprocessed))
+                (codes, names, ementas) = (array(codes), array(names), array(ementas))
+    finally:
+        conn.close()
     print("Loaded", len(names), "documents")
     return (codes, names, ementas, tokenized_corpus)
 
-def load_solicitacoes(con):
+def load_solicitacoes(db_connection):
     crypt_key = os.getenv('CRYPT_KEY_SOLIC_TRAB', default='')
     net = Fernet(crypt_key.encode()) if crypt_key else None
 
-    with con.cursor() as cursor:
-        cursor.execute(SELECT_ST_FIELDS)
-        (codes, names, texts, tokenized_sts) = [], [], [], []
-        for code, name, text, tokenized_st in cursor:
-            text_plain = net.decrypt(base64.b64decode(text)).decode() if net else text
-            tokenized_st_plain = net.decrypt(base64.b64decode(tokenized_st)).decode() if net else tokenized_st
-            codes.append(code)
-            names.append(name)
-            texts.append(text_plain)
-            tokenized_sts.append(literal_eval(tokenized_st_plain))
-
-        (codes, names, texts) = (array(codes), array(names), array(texts))
-
+    conn = psycopg2.connect(db_connection)
+    try:
+        with conn:
+            with conn.cursor() as cursor:
+                cursor.execute(SELECT_ST_FIELDS)
+                (codes, names, texts, tokenized_sts) = [], [], [], []
+                for code, name, text, tokenized_st in cursor:
+                    text_plain = net.decrypt(base64.b64decode(text)).decode() if net else text
+                    tokenized_st_plain = net.decrypt(base64.b64decode(tokenized_st)).decode() if net else tokenized_st
+                    codes.append(code)
+                    names.append(name)
+                    texts.append(text_plain)
+                    tokenized_sts.append(literal_eval(tokenized_st_plain))
+                (codes, names, texts) = (array(codes), array(names), array(texts))
+    finally:
+        conn.close()
     print("Loaded", len(names), "Solicitações de Trabalho")
     return (codes, names, texts, tokenized_sts)
 
 
 # Loading data
 print("Loading corpus...")
-(codes, names, ementas, tokenized_corpus) = load_corpus(connection)
-(codes_sts, names_sts, texto_sts, tokenized_sts) = load_solicitacoes(connection)
+(codes, names, ementas, tokenized_corpus) = load_corpus(db_connection)
+(codes_sts, names_sts, texto_sts, tokenized_sts) = load_solicitacoes(db_connection)
 
 # Loading model with dataset
 model = BM25L(tokenized_corpus)
 model_st = BM25L(tokenized_sts)
 print("Modelos carregados com sucesso")
 
-def getPastFeedback(con):
-    with con.cursor() as cur:
-        cur.execute("SELECT query, user_feedback FROM feedback;")
-        (queries, feedbacks) = [], []
-        for query, feedback in cur:
-            queries.append(query)
-            feedbacks.append(literal_eval(feedback))
-
+def getPastFeedback(db_connection):
+    conn = psycopg2.connect(db_connection)
+    try:
+        with conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT query, user_feedback FROM feedback;")
+                (queries, feedbacks) = [], []
+                for query, feedback in cursor:
+                    queries.append(query)
+                    feedbacks.append(literal_eval(feedback))
+    finally:
+        conn.close()
     scores = []
     all_queries = []
     for entry, q in zip(feedbacks, queries):
@@ -93,58 +103,48 @@ def getPastFeedback(con):
         all_queries.append(q)
     return all_queries, scores
 
-def retrieveDocuments(query, n, raw_query, improve_similarity, con):
+def retrieveDocuments(query, n, raw_query, improve_similarity, past_queries, past_scores):
     indexes = list(range(len(codes)))
-
-    if improve_similarity:
-        past_queries, scores = getPastFeedback(con)
-    else:
-        past_queries, scores = None, None
     slice_indexes, scores, scores_normalized, scores_final = model.get_top_n(query, indexes, n=n,
             improve_similarity=improve_similarity, raw_query= raw_query, past_queries=past_queries,
-            retrieved_docs=scores, names=names)
-
+            retrieved_docs=past_scores, names=names)
     selected_codes = codes[slice_indexes]
     selected_ementas = ementas[slice_indexes]
     selected_names = names[slice_indexes]
-
     return selected_codes, selected_ementas, selected_names, scores, scores_normalized, scores_final
 
-def retrieveSTs(query, n, raw_query, improve_similarity, con):
+def retrieveSTs(query, n, raw_query, improve_similarity, past_queries, past_scores):
     indexes = list(range(len(names_sts)))
-
-    if improve_similarity:
-        past_queries, scores = getPastFeedback(con)
-    else:
-        past_queries, scores = None, None
     slice_indexes, scores, scores_normalized, scores_final = model_st.get_top_n(query, indexes, n=n,
             improve_similarity=improve_similarity, raw_query= raw_query, past_queries=past_queries,
-            retrieved_docs=scores, names=names_sts)
-
+            retrieved_docs=past_scores, names=names_sts)
     selected_sts = texto_sts[slice_indexes]
     selected_names = names_sts[slice_indexes]
     selected_codes = codes_sts[slice_indexes]
-
     return selected_codes, selected_names, selected_sts, scores, scores_normalized, scores_final
 
 
-def getRelationsFromTree(retrieved_doc):
-    with connection.cursor() as cursor:
-        cursor.execute(SELECT_ROOT_BY_PROPOSICAO.format(retrieved_doc))
-        roots = cursor.fetchall()
+def getRelationsFromTree(retrieved_doc, db_connection):
+    conn = psycopg2.connect(db_connection)
+    try:
+        with conn:
+            with conn.cursor() as cursor:
+                cursor.execute(SELECT_ROOT_BY_PROPOSICAO.format(retrieved_doc))
+                roots = cursor.fetchall()
 
-        # Considerando que documento seja uma raiz
-        if (len(roots) == 0):
-            roots.append((retrieved_doc,))
+                # Considerando que documento seja uma raiz
+                if (len(roots) == 0):
+                    roots.append((retrieved_doc,))
 
-        roots = [str(i[0]) for i in roots]
-        cursor.execute(SELECT_AVORE_BY_RAIZ.format("(%s)" % ",".join(roots)))
-        results = cursor.fetchall()
-
-        results = list(map(lambda x: {"numero_sequencia": x[0],"nivel": x[1],"cod_proposicao": x[2],
-                                     "cod_proposicao_referenciada": x[3],"cod_proposicao_raiz": x[4],
-                                     "tipo_referencia": x[5]}, results))
-        return results
+                roots = [str(i[0]) for i in roots]
+                cursor.execute(SELECT_AVORE_BY_RAIZ.format("(%s)" % ",".join(roots)))
+                results = cursor.fetchall()
+                results = list(map(lambda x: {"numero_sequencia": x[0], "nivel": x[1], "cod_proposicao": x[2],
+                                              "cod_proposicao_referenciada": x[3], "cod_proposicao_raiz": x[4],
+                                              "tipo_referencia": x[5]}, results))
+                return results
+    finally:
+        conn.close()
 
 
 @app.route('/', methods=["POST"])
@@ -188,17 +188,16 @@ def lookForSimilar(use_relations_tree = False):
             query = json.loads(resp.content)["query"]
     preprocessed_query = preprocess(query)
 
-    # Refazer conexão com banco de dados quando necessário (ex: após a conexão tiver sido abortada/invalidada)
-    global connection
-    if improve_similarity or use_relations_tree:
-        try:
-            connection.isolation_level
-        except psycopg2.OperationalError:
-            connection = psycopg2.connect(db_connection)
+    # Recuperar feedbacks de relevância passados quando necessário
+    if improve_similarity:
+        past_queries, past_scores = getPastFeedback(db_connection)
+    else:
+        past_queries, past_scores = None, None
 
     # Recuperando das solicitações de trabalho
     selected_codes_sts, selected_names_sts, selected_sts, scores_sts, scores_sts_normalized, scores_sts_final = retrieveSTs(preprocessed_query, k_st,
-                                                                                    improve_similarity=improve_similarity, raw_query=query, con=connection)
+                                                                improve_similarity=improve_similarity, raw_query=query,
+                                                                past_queries=past_queries, past_scores=past_scores)
     resp_results_sts = list()
     for i  in range(k_st):
         resp_results_sts.append({"id": int(selected_codes_sts[i]), "name": selected_names_sts[i], "texto": selected_sts[i].strip(),
@@ -208,12 +207,13 @@ def lookForSimilar(use_relations_tree = False):
 
     # Recuperando do corpus das proposições
     selected_codes, selected_ementas, selected_names, scores, scores_normalized, scores_final = retrieveDocuments(preprocessed_query, k_prop,
-                                                                                    improve_similarity=improve_similarity, raw_query=query, con=connection)
+                                                                improve_similarity=improve_similarity, raw_query=query,
+                                                                past_queries=past_queries, past_scores=past_scores)
     resp_results = list()
-    if(use_relations_tree):
+    if (use_relations_tree):
         for i in range(k_prop):
             # Propostas relacionadas pela árvore de proposições
-            relations_tree = getRelationsFromTree(selected_codes[i])
+            relations_tree = getRelationsFromTree(selected_codes[i], db_connection)
             resp_results.append({"id": int(selected_codes[i]), "name": selected_names[i],
                         "texto": selected_ementas[i].strip(), "score": scores[i],
                         "score_normalized": scores_normalized[i],
@@ -254,14 +254,20 @@ def insertDocs():
         text_preprocessed = ['{' + ','.join(['"'+str(entry)+'"' for entry in preprocess(txt)]) + '}' for txt in text]
 
         data_insert = transpose( [code, name, txt_ementa, text, text_preprocessed] )
-        with connection.cursor() as cursor:
-            for d in data_insert:
-                cursor.execute(INSERT_DATA_CORPUS.format(*d))
-            connection.commit()
+
+        conn = psycopg2.connect(db_connection)
+        try:
+            with conn:
+                with conn.cursor() as cursor:
+                    for d in data_insert:
+                        cursor.execute(INSERT_DATA_CORPUS.format(*d))
+        finally:
+            conn.close()
 
         # Reloading model
         print("RELOADING...")
-        (codes, names, ementas, tokenized_corpus) = load_corpus(connection)
+        global model, codes, names, ementas, tokenized_corpus
+        (codes, names, ementas, tokenized_corpus) = load_corpus(db_connection)
         model = BM25L(tokenized_corpus)
         print("RELOAD DONE")
     except:
@@ -269,7 +275,7 @@ def insertDocs():
 
     return Response(status=201)
 
-@app.route('/insert-forced-sts', methods=["POST"]) #inserir planilha sts sem a primeira vigula, antes de name
+@app.route('/insert-forced-sts', methods=["POST"]) #inserir planilha sts sem a primeira virgula, antes de name
 def insertForcesDocs():
     print("FORCIBLY INSERTING DB")
     content = request.data.decode("utf-8")
@@ -298,7 +304,7 @@ def insertForcesDocs():
         command = INSERT_DATA_ST_teste
         flag = False
         for data in data_insert:
-            if(flag):
+            if (flag):
                 command = command + ','
             command = command + '(' + "'" + data[0] + "'" + ',' + "'" + data[1] + "'" + ',' + "'" + data[2] + "'" + ')'
             if (flag == False):
@@ -323,13 +329,19 @@ def insertForcesDocs():
                 connection.commit()
             print("AQUI 10")
         '''
-        with connection.cursor() as cursor:
-            cursor.execute(command)
-            connection.commit()
+
+        conn = psycopg2.connect(db_connection)
+        try:
+            with conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(command)
+        finally:
+            conn.close()
 
         # Reloading model
         print("RELOADING...")
-        (names, text, text_preprocessed) = load_solicitacoes(connection)
+        global codes_sts, names_sts, texto_sts, tokenized_sts, model_st
+        (codes_sts, names_sts, texto_sts, tokenized_sts) = load_solicitacoes(db_connection)
         model_st = BM25L(text_preprocessed)
         print("RELOAD DONE")
     except:

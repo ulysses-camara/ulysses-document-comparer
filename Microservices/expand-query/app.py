@@ -20,13 +20,12 @@ url_look_for_referenced = os.getenv('URL_LOOK_FOR_REFERENCED', default='http://l
 crypt_key = os.getenv('CRYPT_KEY_SOLIC_TRAB', default='')
 net = Fernet(crypt_key.encode()) if crypt_key else None
 db_connection = os.getenv('ULYSSES_DB_CONNECTION', default='host=ulyssesdb dbname=admin user=admin password=admin port=5432')
-connection = psycopg2.connect(db_connection)
 app = Flask(__name__)
 
 print("Microsserviço iniciado com sucesso")
 
 # Retrieves the text from the corpus and the STs based on the referenced name
-def searchByName(name_parts):
+def searchByName(name_parts, cursor):
 
     query_expansion = ""
     if (len(name_parts)==2):
@@ -41,20 +40,20 @@ def searchByName(name_parts):
 
         labeled_codes = tuple(map(lambda x: x + " " + code, LABELS))
 
-        with connection.cursor() as cursor:
-            cursor.execute(FIND_BY_NAME_CORPUS, (labeled_codes,))
-            results = [text[0] for text in cursor.fetchall()]
-            if query_expansion == "":
-                query_expansion = ' '.join(results)
-            else:
-                query_expansion += ' ' + ' '.join(results)
+        cursor.execute(FIND_BY_NAME_CORPUS, (labeled_codes,))
+        results = [text[0] for text in cursor.fetchall()]
+        if query_expansion == "":
+            query_expansion = ' '.join(results)
+        else:
+            query_expansion += ' ' + ' '.join(results)
 
-            cursor.execute(FIND_BY_NAME_ST, (labeled_codes,))
-            results = [net.decrypt(base64.b64decode(text[0])).decode() if net else text[0] for text in cursor.fetchall()]
-            if query_expansion == "":
-                query_expansion = ' '.join(results)
-            else:
-                query_expansion += ' ' + ' '.join(results)
+        cursor.execute(FIND_BY_NAME_ST, (labeled_codes,))
+        results = [net.decrypt(base64.b64decode(text[0])).decode() if net else text[0] for text in
+                   cursor.fetchall()]
+        if query_expansion == "":
+            query_expansion = ' '.join(results)
+        else:
+            query_expansion += ' ' + ' '.join(results)
 
     return query_expansion
             
@@ -71,21 +70,18 @@ def queryExpansion():
     resp = requests.post(url_look_for_referenced, json={"text": query})
     data = json.loads(resp.content)
 
-    # Refazer conexão com banco de dados quando necessário (ex: após a conexão tiver sido abortada/invalidada)
-    global connection
-    if len(data["entities"]):
-        try:
-            connection.isolation_level
-        except psycopg2.OperationalError:
-            connection = psycopg2.connect(db_connection)
-
-    for entity in data["entities"]:
-        string, score = entity[0], entity[1]
-        name_parts = re.findall(PL_REGEX, string)
-        expansion = searchByName(name_parts)
-        
-        query += " " + expansion
-        query = query.strip()
+    conn = psycopg2.connect(db_connection)
+    try:
+        with conn:
+            with conn.cursor() as cursor:
+                for entity in data["entities"]:
+                    string, score = entity[0], entity[1]
+                    name_parts = re.findall(PL_REGEX, string)
+                    expansion = searchByName(name_parts, cursor)
+                    query += " " + expansion
+                    query = query.strip()
+    finally:
+        conn.close()
 
     resp = {'query': query, 'entities': data["entities"]}
     return jsonify(resp)
