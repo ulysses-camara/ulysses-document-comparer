@@ -133,13 +133,12 @@ class BM25L(BM25):
         """
         Updates bm25 scores using the lambdas values
         """
-
+        result = np.copy(scores)
         for i, name in enumerate(names):
             name = name.strip()
             if (name in lambdas.keys()):
-                scores[i] += lambdas[name]
-
-        return scores
+                result[i] += lambdas[name]
+        return result
 
     def _lambda_calc(self, all_queries, retrieved_docs, query, cut, delta):
         """
@@ -175,11 +174,13 @@ class BM25L(BM25):
 
         scores = self.get_scores(query)
         #scores = self.get_scores_cached(query) # Incluído por Cássio - usar esse caso cache tools instalado
-        try:
+        if np.isclose(np.max(scores), np.min(scores), atol=1e-5):
+            score_ref = 1.0 if np.max(scores) > 1e-6 else 0.0
+            scores_normalized = np.array([score_ref for i in range(len(scores))])
+        else:
             scores_normalized = (scores - np.min(scores)) / (np.max(scores) - np.min(scores))
-        except:
-            scores_normalized = [0 for i in range(scores)]
 
+<<<<<<< HEAD
         scores_inicial = scores #antes chamado de scores final
         if (improve_similarity):
             try:
@@ -189,9 +190,16 @@ class BM25L(BM25):
             except:
                 print("Error calculating lambdas. If there are no past feedbacks yet ignore this message.", flush=True)
                 scores_inicial = scores
+=======
+        scores_final = np.copy(scores_normalized)
+        if (improve_similarity and len(past_queries) > 0):
+            lambdas = self._lambda_calc(all_queries=past_queries, retrieved_docs=retrieved_docs,
+                                    query=raw_query, cut=cut, delta=delta)
+            scores_final = self._lambda_update(scores=scores_normalized, lambdas=lambdas, names=names)
+>>>>>>> bd74cad355a51914a0b60d4021ec00306fb198a5
 
-        top_n = np.argpartition(scores, -n)[::-1][:n]
-        top_n = top_n[np.argsort(scores[top_n])[::-1]]
+        top_n = np.argpartition(scores_final, -n)[::-1][:n]
+        top_n = top_n[np.argsort(scores_final[top_n])[::-1]]
 
         return [documents[i] for i in top_n], [scores[i] for i in top_n], [scores_normalized[i] for i in top_n], [scores_inicial[i] for i in top_n]
 

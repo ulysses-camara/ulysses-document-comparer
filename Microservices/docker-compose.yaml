@@ -11,6 +11,7 @@ services:
             - "5000:5000"
         networks:
             - ulysses
+        restart: unless-stopped
     save-relevance-feedback:
         container_name: save-relevance-feedback
         build:
@@ -21,6 +22,7 @@ services:
             - "5001:5001"
         networks:
             - ulysses
+        restart: unless-stopped
     look-for-referenced:
         container_name: look-for-referenced
         build:
@@ -31,6 +33,7 @@ services:
             - "5002:5002"
         networks:
             - ulysses
+        restart: unless-stopped
     expand-query:
         container_name: expand-query
         build:
@@ -41,6 +44,7 @@ services:
             - "5003:5003"
         networks:
             - ulysses
+        restart: unless-stopped
 
 networks:
   ulysses:

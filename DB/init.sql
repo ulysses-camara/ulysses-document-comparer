@@ -20,14 +20,16 @@ CREATE TABLE arvore_proposicoes (
    query VARCHAR,
    user_feedback VARCHAR,
    extra_results VARCHAR,
-   date_created TIMESTAMP
+   date_created TIMESTAMP,
+   user_id VARCHAR
 );
 
 CREATE TABLE solicitacoes (
    code INTEGER NOT NULL,
    name VARCHAR,
    text VARCHAR,
-   text_preprocessed VARCHAR
+   text_preprocessed VARCHAR,
+   ficticia BOOLEAN
 );
 
 \COPY corpus FROM '/var/lib/postgresql/corpus.csv' CSV HEADER;
