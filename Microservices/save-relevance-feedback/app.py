@@ -7,7 +7,7 @@ import json
 
 VALID_CLASSES = ["r", "i", "vr", "d", "pr"] # relevante; irrelevante; muito relevante; duvida; pouco relevante
 INSERT_ENTRY = "INSERT INTO feedback(query, user_feedback, extra_results, date_created, user_id) VALUES ({}, {}, {}, CURRENT_TIMESTAMP, {});"
-SELECT_ENTRY = "SELECT id, query, user_id, date_created, user_feedback, extra_results FROM feedback {}"
+SELECT_ENTRY = "SELECT code, query, user_id, date_created, user_feedback, extra_results FROM feedback {}"
 
 app = Flask(__name__)
 
@@ -81,8 +81,8 @@ def feedbacks():
             with conn:
                 with conn.cursor() as cursor:
                     cursor.execute(SELECT_ENTRY.format(sql_criteria))
-                    for id, query, user_id, date_created, user_feedback, extra_results in cursor:
-                        result.append({'id': id, 'query': query, 'user_id': user_id, 'date_created': date_created,
+                    for code, query, user_id, date_created, user_feedback, extra_results in cursor:
+                        result.append({'code': code, 'query': query, 'user_id': user_id, 'date_created': date_created,
                                        'user_feedback': user_feedback, 'extra_results': extra_results})
         finally:
             conn.close()

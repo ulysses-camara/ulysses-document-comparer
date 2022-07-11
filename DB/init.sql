@@ -1,22 +1,24 @@
 CREATE TABLE arvore_proposicoes (
+   code INTEGER NOT NULL,
    numero_sequencia INTEGER,
-   nivel INTEGER,
    cod_proposicao INTEGER,
    cod_proposicao_referenciada INTEGER,
-   cod_proposicao_raiz INTEGER,
    tipo_referencia VARCHAR
 );
 
- CREATE TABLE corpus (
+ CREATE TABLE proposicoes_legislativas (
    code INTEGER NOT NULL,
+   sig_tipo VARCHAR,
    name VARCHAR,
    txt_ementa VARCHAR,
+   em_tramitacao VARCHAR,
+   situacao VARCHAR,
    text VARCHAR,
    text_preprocessed VARCHAR
 );
 
  CREATE TABLE feedback (
-   id SERIAL,
+   code SERIAL,
    query VARCHAR,
    user_feedback VARCHAR,
    extra_results VARCHAR,
@@ -24,8 +26,9 @@ CREATE TABLE arvore_proposicoes (
    user_id VARCHAR
 );
 
-CREATE TABLE solicitacoes (
+CREATE TABLE consultas_legislativas (
    code INTEGER NOT NULL,
+   sig_tipo VARCHAR,
    name VARCHAR,
    text VARCHAR,
    text_preprocessed VARCHAR,

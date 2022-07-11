@@ -14,14 +14,19 @@ from preprocessing import preprocess
 import base64
 from cryptography.fernet import Fernet
 
-SELECT_CORPUS = "SELECT code, name, txt_ementa, text_preprocessed FROM corpus;"
-SELECT_ST_FIELDS = "SELECT code, name, text, text_preprocessed FROM solicitacoes where length(name) > 1;"
-INSERT_DATA_CORPUS = "INSERT INTO corpus (code, name, txt_ementa, text, text_preprocessed) VALUES ('{}','{}','{}','{}','{}');"
+SELECT_PROPS_LEGS = "SELECT code, name, txt_ementa, text_preprocessed FROM proposicoes_legislativas;"
+SELECT_CONSULTAS = "SELECT code, name, text, text_preprocessed FROM consultas_legislativas where length(name) > 1;"
+
+#Nao insere todas as colunas, exceto aquelas necessaria para essa aplicacao atualmente (load_props_legs(), antiga load_corpus()).
+INSERT_PROP_LEG = "INSERT INTO proposicoes_legislativas (code, name, txt_ementa, text, text_preprocessed) VALUES ('{}','{}','{}','{}','{}');"
+
 SELECT_ROOT_BY_PROPOSICAO = "SELECT cod_proposicao_raiz FROM arvore_proposicoes WHERE cod_proposicao = {}"
 SELECT_AVORE_BY_RAIZ = "SELECT * FROM arvore_proposicoes WHERE cod_proposicao_raiz IN {}"
 
-INSERT_DATA_ST = "INSERT INTO solicitacoes (name, text, text_preprocessed) VALUES ('{}','{}','{}');"
-INSERT_DATA_ST_teste = "INSERT INTO solicitacoes (name, text, text_preprocessed) VALUES "
+SELECT_ARVORE_BY_PROPOSICAO = "SELECT * FROM arvore_proposicoes WHERE cod_proposicao = {}"
+
+INSERT_DATA_ST = "INSERT INTO consultas_legislativas (name, text, text_preprocessed) VALUES ('{}','{}','{}');"
+INSERT_DATA_ST_teste = "INSERT INTO consultas_legislativas (name, text, text_preprocessed) VALUES "
 teste2 = "('{}','{}','{}')"
 
 session = requests.Session()
@@ -32,12 +37,12 @@ url_expand_query = os.getenv('URL_EXPAND_QUERY', default='http://expand-query:50
 db_connection = os.getenv('ULYSSES_DB_CONNECTION', default='host=localhost dbname=admin user=admin password=admin port=5432')
 app = Flask(__name__)
 
-def load_corpus(db_connection):
+def load_props_legs(db_connection):
     conn = psycopg2.connect(db_connection)
     try:
         with conn:
             with conn.cursor() as cursor:
-                cursor.execute(SELECT_CORPUS)
+                cursor.execute(SELECT_PROPS_LEGS)
                 (codes, names, ementas, tokenized_corpus) = [], [], [], []
                 for code, name, ementa, text_preprocessed in cursor:
                     codes.append(code)
@@ -58,7 +63,7 @@ def load_solicitacoes(db_connection):
     try:
         with conn:
             with conn.cursor() as cursor:
-                cursor.execute(SELECT_ST_FIELDS)
+                cursor.execute(SELECT_CONSULTAS)
                 (codes, names, texts, tokenized_sts) = [], [], [], []
                 for code, name, text, tokenized_st in cursor:
                     text_plain = net.decrypt(base64.b64decode(text)).decode() if net else text
@@ -76,7 +81,7 @@ def load_solicitacoes(db_connection):
 
 # Loading data
 print("Loading corpus...")
-(codes, names, ementas, tokenized_corpus) = load_corpus(db_connection)
+(codes, names, ementas, tokenized_corpus) = load_props_legs(db_connection)
 (codes_sts, names_sts, texto_sts, tokenized_sts) = load_solicitacoes(db_connection)
 
 # Loading model with dataset
@@ -129,6 +134,7 @@ def getRelationsFromTree(retrieved_doc, db_connection):
     try:
         with conn:
             with conn.cursor() as cursor:
+                '''
                 cursor.execute(SELECT_ROOT_BY_PROPOSICAO.format(retrieved_doc))
                 roots = cursor.fetchall()
 
@@ -139,16 +145,27 @@ def getRelationsFromTree(retrieved_doc, db_connection):
                 roots = [str(i[0]) for i in roots]
                 cursor.execute(SELECT_AVORE_BY_RAIZ.format("(%s)" % ",".join(roots)))
                 results = cursor.fetchall()
+                '''
+                #nao existe mais coluna raiz, logo procuraremos direto pela proposicao
+                cursor.execute(SELECT_ARVORE_BY_PROPOSICAO.format(retrieved_doc))
+                results = cursor.fetchall()
+                
+                '''
                 results = list(map(lambda x: {"numero_sequencia": x[0], "nivel": x[1], "cod_proposicao": x[2],
                                               "cod_proposicao_referenciada": x[3], "cod_proposicao_raiz": x[4],
                                               "tipo_referencia": x[5]}, results))
+                '''
+                #Adequando resultado as novas colunas do db
+                results = list(map(lambda x: {"code": x[0], "numero_sequencia": x[1], "cod_proposicao": x[2],
+                                              "cod_proposicao_referenciada": x[3],
+                                              "tipo_referencia": x[4]}, results))
                 return results
     finally:
         conn.close()
 
 
 @app.route('/', methods=["POST"])
-def lookForSimilar(use_relations_tree = False):
+def lookForSimilar():
     args = request.json
     try:
         query = args["text"]
@@ -163,21 +180,18 @@ def lookForSimilar(use_relations_tree = False):
     except:
         k_st = 20
     try:
-        query_expansion = int(args["expansao"])
-        if (query_expansion == 0):
-            query_expansion = False
-        else:
-            query_expansion = True
+        query_expansion = bool(args["expansao"]) #bool retorna True se for uma string o parametro; Cuidado na hora de fazer a request.
     except:
         query_expansion = True
     try:
-        improve_similarity = int(args["improve-similarity"])
-        if (improve_similarity == 0):
-            improve_similarity = False
-        else:
-            improve_similarity = True
+        improve_similarity = bool(args["improve-similarity"])
     except:
         improve_similarity = True
+        
+    try:
+        use_relations_tree = bool(args["use_relations_tree"])
+    except:
+        use_relations_tree = False 
 
     k_prop = min(k_prop, len(codes))
     k_st = min(k_st, len(names_sts))
@@ -260,14 +274,14 @@ def insertDocs():
             with conn:
                 with conn.cursor() as cursor:
                     for d in data_insert:
-                        cursor.execute(INSERT_DATA_CORPUS.format(*d))
+                        cursor.execute(INSERT_PROP_LEG.format(*d)) #Colunas faltantes podem ser nulas: nao deve haver problemas
         finally:
             conn.close()
 
         # Reloading model
         print("RELOADING...")
         global model, codes, names, ementas, tokenized_corpus
-        (codes, names, ementas, tokenized_corpus) = load_corpus(db_connection)
+        (codes, names, ementas, tokenized_corpus) = load_props_legs(db_connection)
         model = BM25L(tokenized_corpus)
         print("RELOAD DONE")
     except:
