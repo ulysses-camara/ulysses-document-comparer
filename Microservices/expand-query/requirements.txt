@@ -1,6 +1,8 @@
 Flask
 requests
+SQLAlchemy
 psycopg2
+pymssql
 python-dotenv
 python-crfsuite
 cryptography

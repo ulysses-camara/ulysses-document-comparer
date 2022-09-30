@@ -2,15 +2,24 @@ import os
 import json
 import re
 import datetime
-from flask import Flask, request, jsonify, Response
-import requests
-import psycopg2
-
 import base64
+import requests
+
+from flask import Flask, request, jsonify, Response
+from sqlalchemy import create_engine
 from cryptography.fernet import Fernet
 
-FIND_BY_NAME_CORPUS = 'SELECT txt_ementa FROM corpus WHERE name IN %s'
-FIND_BY_NAME_ST = 'SELECT text FROM solicitacoes WHERE name IN %s'
+def table_name(name):
+    return "".join([c if c.isalnum() else "_" for c in name])
+
+db_connection = os.getenv('ULYSSES_DB_CONNECTION', default='postgresql+psycopg2://admin:admin@ulyssesdb/admin')
+tb_corpus = table_name(os.getenv('TB_CORPUS', default='corpus'))
+tb_solicitacoes = table_name(os.getenv('TB_SOLICITACOES', default='solicitacoes'))
+tb_feedback = table_name(os.getenv('TB_FEEDBACK', default='feedback'))
+db_engine = create_engine(db_connection)
+
+FIND_BY_NAME_CORPUS = 'SELECT txt_ementa FROM ' + tb_corpus + ' WHERE name IN %s'
+FIND_BY_NAME_ST = 'SELECT text FROM ' + tb_solicitacoes + ' WHERE name IN %s'
 
 PL_REGEX = "[0-9]+"
 LABELS = ["ADD","ANEXO","APJ","ATC","AV","CN","EMS","INC","MPV","MSC","PL","PEC","PLP",
@@ -19,7 +28,7 @@ LABELS = ["ADD","ANEXO","APJ","ATC","AV","CN","EMS","INC","MPV","MSC","PL","PEC"
 url_look_for_referenced = os.getenv('URL_LOOK_FOR_REFERENCED', default='http://look-for-referenced:5002')
 crypt_key = os.getenv('CRYPT_KEY_SOLIC_TRAB', default='')
 net = Fernet(crypt_key.encode()) if crypt_key else None
-db_connection = os.getenv('ULYSSES_DB_CONNECTION', default='host=ulyssesdb dbname=admin user=admin password=admin port=5432')
+
 app = Flask(__name__)
 
 print("Microsserviço iniciado com sucesso")
@@ -64,24 +73,19 @@ def queryExpansion():
     args = request.json
     try:
         query = args["query"]
+        resp = requests.post(url_look_for_referenced, json={"text": query})
+        data = json.loads(resp.content)
     except:
         return Response(status=500)
 
-    resp = requests.post(url_look_for_referenced, json={"text": query})
-    data = json.loads(resp.content)
-
-    conn = psycopg2.connect(db_connection)
-    try:
-        with conn:
-            with conn.cursor() as cursor:
-                for entity in data["entities"]:
-                    string, score = entity[0], entity[1]
-                    name_parts = re.findall(PL_REGEX, string)
-                    expansion = searchByName(name_parts, cursor)
-                    query += " " + expansion
-                    query = query.strip()
-    finally:
-        conn.close()
+    with db_engine.connect() as conn:
+        with conn.connection.cursor() as cursor:
+            for entity in data["entities"]:
+                string, score = entity[0], entity[1]
+                name_parts = re.findall(PL_REGEX, string)
+                expansion = searchByName(name_parts, cursor)
+                query += " " + expansion
+                query = query.strip()
 
     resp = {'query': query, 'entities': data["entities"]}
     return jsonify(resp)

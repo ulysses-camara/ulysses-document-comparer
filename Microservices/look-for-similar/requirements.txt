@@ -2,7 +2,9 @@ Flask
 numpy
 nltk
 requests
+SQLAlchemy
 psycopg2
+pymssql
 python-dotenv
 python-crfsuite
 scikit-learn
