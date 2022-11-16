@@ -7,7 +7,7 @@ app = Flask(__name__)
 
 ner_model = CRF()
 try:
-    ner_model.set_model_file("model.crf.tagger.app")
+    ner_model.set_model_file("crf-types-tagger.app")
 except Exception as ex:
     traceback.print_exc()
 

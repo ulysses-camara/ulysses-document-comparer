@@ -138,26 +138,37 @@ class CRF:
             if y[0]=="O":
                 return []
             else:
+                print("f")
+                print(y[0])
                 return [(" ".join(x), sum(marginal)/len(marginal))]
 
         docs = []
+        doc_labels = []
         confidence = []
         sent = " "
         prob = 0
         counter = 0
+        
         for i in range(n):
-            if y[i]=="DOCUMENTO":
+            #print(y[i]) #modificacao para checar o tipo dado a cada token    
+            if y[i] == 'O' or y[i][0:2] == 'B-':
+                if sent != ' ':
+                    docs.append(sent.strip(' '))
+                    confidence.append(round(prob/counter, 2))
+                    counter = 0
+                sent = ' '
+                if y[i][0:2] == 'B-':
+                    sent += x[i] + " "
+                    prob += marginal[i]
+                    counter += 1
+                    doc_labels.append(y[i][2:])
+                prop = 0
+            else:
                 sent += x[i] + " "
                 prob += marginal[i]
                 counter += 1
-            else:
-                if sent !=" ":
-                    docs.append(sent)
-                    confidence.append(round(prob/counter, 2))
-                    counter = 0
-                sent = " "
-                prob = 0
         if sent!=" ":
             docs.append(sent)
             confidence.append(prob/ counter)
-        return list(zip(docs, confidence))
+                    
+        return list(zip(docs, doc_labels, confidence))
