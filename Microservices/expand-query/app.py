@@ -21,7 +21,7 @@ db_engine = create_engine(db_connection)
 
 #Possivelmente devem ser corrigidos devido ao refatoramento do bd
 FIND_BY_NAME_CORPUS = 'SELECT txt_ementa FROM ' + tb_corpus + ' WHERE name IN %s'
-FIND_BY_NAME_ST = 'SELECT text FROM ' + tb_solicitacoes + ' WHERE name IN %s'
+FIND_BY_NAME_ST = 'SELECT text FROM ' + tb_solicitacoes + ' WHERE name IN %s' #txtAssunto
 
 PL_REGEX = "[0-9]+" #Busca por números, pode ser usado nas leis e nas STs também, mas não para os FUNDapelidos
 LABELS = ["ADD","ANEXO","APJ","ATC","AV","CN","EMS","INC","MPV","MSC","PL","PEC","PLP",
@@ -93,7 +93,7 @@ def queryExpansion():
                     query += " " + expansion
                     query = query.strip()
 
-    resp = {'query': query, 'entities': data["entities"]}
+    resp = {'query': query}
     return jsonify(resp)
 
 

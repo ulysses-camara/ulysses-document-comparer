@@ -1,0 +1,95 @@
+[33mcommit 2f5fc4b8dc2534e7b02c7477c029d6ffa2e19c84[m[33m ([m[1;36mHEAD -> [m[1;32mexpand_query_test[m[33m)[m
+Author: rafael-p-gouveia <rafael.p.gouveia2@gmail.com>
+Date:   Wed Nov 16 18:08:24 2022 -0300
+
+    adding changes to the LookForReferenced and ExpandQuery microservices
+
+[33mcommit 241fd3abdba0f4f3a6edac4eb8475228649dfcc0[m[33m ([m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmaster[m[33m)[m
+Author: P_7178 <francisco.edmundo@camara.leg.br>
+Date:   Fri Sep 30 12:09:47 2022 -0300
+
+    Uso do SQLAlchemy com suporte ao PostgreSQL (psycopg2) e ao SQL Server (pymssql)
+
+[33mcommit bd74cad355a51914a0b60d4021ec00306fb198a5[m
+Author: P_7178 <francisco.edmundo@camara.leg.br>
+Date:   Thu Jun 30 13:41:24 2022 -0300
+
+    Configuração do docker-compose para garantir que os containers dos microsserviços sejam inicializados após reinicialização do computador hospedeiro.
+
+[33mcommit 21dde84f4e5c1cd10be910a022a73cd1ce4cbaf3[m
+Author: P_7178 <francisco.edmundo@camara.leg.br>
+Date:   Thu Jun 23 17:12:54 2022 -0300
+
+    Correção do problema de conexão com banco de dados 'psycopg2.OperationalError: server closed the connection unexpectedly'. A solução considerou o mecanismo recomendado pela documentação da biblioteca psycopg2 para controle de conexões e transações com o banco de dados Postgres. Foi adicionado o endpoint 'feedbacks' no projeto save-relevance para retornar os feedbacks salvos por user_id.
+
+[33mcommit 703616641938c101281e20913acfac0cc758bdda[m
+Author: P_7178 <francisco.edmundo@camara.leg.br>
+Date:   Tue Jun 21 06:48:59 2022 -0300
+
+    Tratamento de exceção -rollback
+
+[33mcommit 63f2f8e5719fb40fe6ed62246f829435ab8e8af6[m
+Author: P_7178 <francisco.edmundo@camara.leg.br>
+Date:   Tue Jun 21 02:48:20 2022 -0300
+
+    SaveRelevanceFeedback: ajustes finais de integração
+
+[33mcommit 7d37921a6ecb8b44043774c48c0c9ecb6d283b33[m
+Author: P_7178 <francisco.edmundo@camara.leg.br>
+Date:   Tue Jun 21 02:47:49 2022 -0300
+
+    ExpandQuery: ajustes finais de integração
+
+[33mcommit 2cf7a4e6336ef439783c28e0d5f0bbbfce5a04b9[m
+Author: P_7178 <francisco.edmundo@camara.leg.br>
+Date:   Tue Jun 21 02:45:37 2022 -0300
+
+    LookForReferenced: ajustes finais de integração
+
+[33mcommit b667a9954a8af76169809f67e846248015ba4850[m
+Author: P_7178 <francisco.edmundo@camara.leg.br>
+Date:   Tue Jun 21 02:44:32 2022 -0300
+
+    LookForSimilar: ajustes finais de integração
+
+[33mcommit 0b0b9b01d22f4e81dc9668e15330eeabc34961bc[m
+Author: P_7178 <francisco.edmundo@camara.leg.br>
+Date:   Wed Jun 15 18:49:11 2022 -0300
+
+    Adição do código da proposição no retorno do lookforsimilar. Correção do acesso à tabela de feedbacks quando não houver registros. Correção do cálculo Lambda quando a tabela de feedbacks estiver vazia: não há necessidade de atualizar os scores (com bônus) nesse caso.
+
+[33mcommit 8a9aafd908085f8035bebef5814dacf5e79f538a[m
+Author: P_7178 <francisco.edmundo@camara.leg.br>
+Date:   Wed Jun 15 12:30:02 2022 -0300
+
+    Configuração externa de conexão de banco de dados e de chave criptográfica por meio de variáveis de ambiente. Separação dos parâmetros num_proposicoes e num_solicitacoes. Revisão do score_final para aplicar o bônus sobre o score_normalizado. Correções e otimizações diversas.
+
+[33mcommit 9fca567a4e5fd30670289f9c63a6fc5ad426c2b1[m
+Author: ellenprsouza <62527875+ellenprsouza@users.noreply.github.com>
+Date:   Mon Jun 13 20:12:53 2022 -0300
+
+    Update init.sql
+
+[33mcommit 29fbe952c3c66afaeab009d5d69a88f2f077c65a[m
+Author: P_7178 <francisco.edmundo@camara.leg.br>
+Date:   Sun Jun 12 00:13:44 2022 -0300
+
+    Retorno da função load_solicitacoes esperado como sequência de arrrays.
+
+[33mcommit 5ea7572857eeca97477da88e5cf81d34a4baaa5a[m
+Author: P_7178 <francisco.edmundo@camara.leg.br>
+Date:   Fri Jun 10 15:11:39 2022 -0300
+
+    Nova dependência: cryptography
+
+[33mcommit 272b06937abb3c328f9e2f925c1e398b212dae7f[m
+Author: P_7178 <francisco.edmundo@camara.leg.br>
+Date:   Fri Jun 10 15:04:26 2022 -0300
+
+    Revisão e otimização de código
+
+[33mcommit e5f675fa3e82590ec2abef7a6a83b41a329c698c[m
+Author: felsiq <felipe.siqueira@usp.br>
+Date:   Mon May 30 14:47:00 2022 -0300
+
+    add: add initial structure
