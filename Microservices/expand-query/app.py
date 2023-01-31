@@ -18,10 +18,12 @@ tb_solicitacoes = table_name(os.getenv('TB_SOLICITACOES', default='solicitacoes'
 tb_feedback = table_name(os.getenv('TB_FEEDBACK', default='feedback'))
 db_engine = create_engine(db_connection)
 
-FIND_BY_NAME_CORPUS = 'SELECT txt_ementa FROM ' + tb_corpus + ' WHERE name IN %s'
-FIND_BY_NAME_ST = 'SELECT text FROM ' + tb_solicitacoes + ' WHERE name IN %s'
 
-PL_REGEX = "[0-9]+"
+#Possivelmente devem ser corrigidos devido ao refatoramento do bd
+FIND_BY_NAME_CORPUS = 'SELECT txt_ementa FROM ' + tb_corpus + ' WHERE name IN %s'
+FIND_BY_NAME_ST = 'SELECT text FROM ' + tb_solicitacoes + ' WHERE name IN %s' #txtAssunto
+
+PL_REGEX = "[0-9]+" #Busca por números, pode ser usado nas leis e nas STs também, mas não para os FUNDapelidos
 LABELS = ["ADD","ANEXO","APJ","ATC","AV","CN","EMS","INC","MPV","MSC","PL","PEC","PLP",
             "PLV","PDC","PRC","PRN","PFC","REP","REQ","RIC","RCP","SIT","ST"]
 
@@ -34,7 +36,7 @@ app = Flask(__name__)
 print("Microsserviço iniciado com sucesso")
 
 # Retrieves the text from the corpus and the STs based on the referenced name
-def searchByName(name_parts, cursor):
+def searchByName(name_parts, label, cursor):
 
     query_expansion = ""
     if (len(name_parts)==2):
@@ -49,20 +51,22 @@ def searchByName(name_parts, cursor):
 
         labeled_codes = tuple(map(lambda x: x + " " + code, LABELS))
 
-        cursor.execute(FIND_BY_NAME_CORPUS, (labeled_codes,))
-        results = [text[0] for text in cursor.fetchall()]
-        if query_expansion == "":
-            query_expansion = ' '.join(results)
-        else:
-            query_expansion += ' ' + ' '.join(results)
+        if label == 'FUNDprojetodelei':
+            cursor.execute(FIND_BY_NAME_CORPUS, (labeled_codes,))
+            results = [text[0] for text in cursor.fetchall()]
+            if query_expansion == "":
+                query_expansion = ' '.join(results)
+            else:
+                query_expansion += ' ' + ' '.join(results)
 
-        cursor.execute(FIND_BY_NAME_ST, (labeled_codes,))
-        results = [net.decrypt(base64.b64decode(text[0])).decode() if net else text[0] for text in
-                   cursor.fetchall()]
-        if query_expansion == "":
-            query_expansion = ' '.join(results)
-        else:
-            query_expansion += ' ' + ' '.join(results)
+        elif label == 'FUNDsolicitacaotrabalho':
+            cursor.execute(FIND_BY_NAME_ST, (labeled_codes,))
+            results = [net.decrypt(base64.b64decode(text[0])).decode() if net else text[0] for text in
+                    cursor.fetchall()]
+            if query_expansion == "":
+                query_expansion = ' '.join(results)
+            else:
+                query_expansion += ' ' + ' '.join(results)
 
     return query_expansion
             
@@ -78,16 +82,18 @@ def queryExpansion():
     except:
         return Response(status=500)
 
+    #labels de interesse: FUNDlei(?), FUNDapelido(?), FUNDprojetodelei e FUNDsolicitacaotrabalho
     with db_engine.connect() as conn:
         with conn.connection.cursor() as cursor:
             for entity in data["entities"]:
-                string, score = entity[0], entity[1]
-                name_parts = re.findall(PL_REGEX, string)
-                expansion = searchByName(name_parts, cursor)
-                query += " " + expansion
-                query = query.strip()
+                token, label, score = entity[0], entity[1], entity[2]
+                if label == 'FUNDprojetodelei' or label == 'FUNDsolicitacaotrabalho':
+                    name_parts = re.findall(PL_REGEX, token)
+                    expansion = searchByName(name_parts, label, cursor)
+                    query += " " + expansion
+                    query = query.strip()
 
-    resp = {'query': query, 'entities': data["entities"]}
+    resp = {'query': query}
     return jsonify(resp)
 
 
