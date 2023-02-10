@@ -96,7 +96,7 @@ def getPastFeedback():
     scores = []
     all_queries = []
     for entry, q in zip(feedbacks, queries):
-        scores.append([[i["id"], float(i["score"]), float(i["score_normalized"])] for i in entry if i["class"]!='i'])
+        scores.append([[i["id"], float(i["score"]), float(i["score_normalized"]), i["class"]] for i in entry]) #if i["class"]!='i'])
         all_queries.append(q)
     return all_queries, scores
 
