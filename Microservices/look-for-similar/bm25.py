@@ -59,7 +59,7 @@ class BM25:
 
     def get_top_n(self, query, documents, n=5, 
                     improve_similarity=False, raw_query=None, past_queries=[], 
-                    retrieved_docs=[], names=[], cut=0.6, delta=0.7):
+                    retrieved_docs=[], names=[], cut=0.4, delta=1.0):
 
         assert self.corpus_size == len(documents), "The documents given don't match the index corpus"
 
@@ -156,11 +156,15 @@ class BM25L(BM25):
         for tuple in doc_sim:
             sim = tuple[1]
             for doc in tuple[0]:
-                (name, score, score_norm) = doc
+                (name, score, score_norm, relevance) = doc
+                rel = 1
+                if (relevance == 'i'):
+                    rel = -1
+
                 if (name in dic):
-                    dic[name] += score_norm * sim
+                    dic[name] += score_norm * sim * rel
                 else:
-                    dic[name] = score_norm * sim  # calculando a soma do produto sim*score
+                    dic[name] = score_norm * sim * rel # calculando a soma do produto sim*score*rel
 
         for key in dic:
             dic[key] = np.log(dic[key] + 1) * delta
