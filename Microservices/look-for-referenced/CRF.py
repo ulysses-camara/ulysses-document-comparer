@@ -140,7 +140,7 @@ class CRF:
             else:
                 print("f")
                 print(y[0])
-                return [(" ".join(x), sum(marginal)/len(marginal))]
+                return [(" ".join(x), labels[0], sum(marginal)/len(marginal))]
 
         docs = []
         doc_labels = []
