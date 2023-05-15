@@ -6,7 +6,7 @@ import csv
 from io import StringIO
 from flask import Flask, request, jsonify, Response
 from numpy import transpose, array
-from bm25 import BM25L
+from bm25 import BM25L, DEFAULT_CUT, DEFAULT_DELTA
 from preprocessing import preprocess
 import base64
 from cryptography.fernet import Fernet
@@ -100,21 +100,23 @@ def getPastFeedback():
         all_queries.append(q)
     return all_queries, scores
 
-def retrieveDocuments(query, n, raw_query, improve_similarity, past_queries, past_scores):
+def retrieveDocuments(query, n, raw_query, improve_similarity, past_queries, past_scores, 
+                      passed_cut = DEFAULT_CUT, passed_delta = DEFAULT_DELTA):
     indexes = list(range(len(codes)))
     slice_indexes, scores, scores_normalized, scores_final = model.get_top_n(query, indexes, n=n,
             improve_similarity=improve_similarity, raw_query= raw_query, past_queries=past_queries,
-            retrieved_docs=past_scores, names=names)
+            retrieved_docs=past_scores, names=names, cut=passed_cut, delta = passed_delta)
     selected_codes = codes[slice_indexes]
     selected_ementas = ementas[slice_indexes]
     selected_names = names[slice_indexes]
     return selected_codes, selected_ementas, selected_names, scores, scores_normalized, scores_final
 
-def retrieveSTs(query, n, raw_query, improve_similarity, past_queries, past_scores):
+def retrieveSTs(query, n, raw_query, improve_similarity, past_queries, past_scores,
+                passed_cut = DEFAULT_CUT, passed_delta = DEFAULT_DELTA):
     indexes = list(range(len(names_sts)))
     slice_indexes, scores, scores_normalized, scores_final = model_st.get_top_n(query, indexes, n=n,
             improve_similarity=improve_similarity, raw_query= raw_query, past_queries=past_queries,
-            retrieved_docs=past_scores, names=names_sts)
+            retrieved_docs=past_scores, names=names_sts, cut=passed_cut, delta = passed_delta)
     selected_sts = texto_sts[slice_indexes]
     selected_names = names_sts[slice_indexes]
     selected_codes = codes_sts[slice_indexes]
@@ -171,6 +173,15 @@ def lookForSimilar(use_relations_tree = False):
             improve_similarity = True
     except:
         improve_similarity = True
+    
+    try:
+        passed_cut = float(args["cut"])
+    except:
+        passed_cut = DEFAULT_CUT
+    try:
+        passed_delta = float(args["delta"])
+    except:
+        passed_delta = DEFAULT_DELTA
 
     k_prop = min(k_prop, len(codes))
     k_st = min(k_st, len(names_sts))
@@ -190,7 +201,8 @@ def lookForSimilar(use_relations_tree = False):
     # Recuperando das solicitações de trabalho
     selected_codes_sts, selected_names_sts, selected_sts, scores_sts, scores_sts_normalized, scores_sts_final = retrieveSTs(preprocessed_query, k_st,
                                                                 improve_similarity=improve_similarity, raw_query=query,
-                                                                past_queries=past_queries, past_scores=past_scores)
+                                                                past_queries=past_queries, past_scores=past_scores,
+                                                                cut = passed_cut, delta = passed_delta)
     resp_results_sts = list()
     for i  in range(k_st):
         resp_results_sts.append({"id": int(selected_codes_sts[i]), "name": selected_names_sts[i], "texto": selected_sts[i].strip(),
@@ -201,7 +213,8 @@ def lookForSimilar(use_relations_tree = False):
     # Recuperando do corpus das proposições
     selected_codes, selected_ementas, selected_names, scores, scores_normalized, scores_final = retrieveDocuments(preprocessed_query, k_prop,
                                                                 improve_similarity=improve_similarity, raw_query=query,
-                                                                past_queries=past_queries, past_scores=past_scores)
+                                                                past_queries=past_queries, past_scores=past_scores,
+                                                                cut = passed_cut, delta = passed_delta)
     resp_results = list()
     if (use_relations_tree):
         for i in range(k_prop):
