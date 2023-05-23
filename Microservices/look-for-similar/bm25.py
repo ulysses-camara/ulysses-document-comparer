@@ -5,6 +5,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 #from cachetools import cached, LRUCache
 
+DEFAULT_CUT = 0.4
+DEFAULT_DELTA = 1.0
+
 class BM25:
     def __init__(self, corpus, tokenizer=None):
         self.corpus_size = len(corpus)
@@ -59,7 +62,7 @@ class BM25:
 
     def get_top_n(self, query, documents, n=5, 
                     improve_similarity=False, raw_query=None, past_queries=[], 
-                    retrieved_docs=[], names=[], cut=0.4, delta=1.0):
+                    retrieved_docs=[], names=[], cut=DEFAULT_CUT, delta=DEFAULT_DELTA):
 
         assert self.corpus_size == len(documents), "The documents given don't match the index corpus"
 
