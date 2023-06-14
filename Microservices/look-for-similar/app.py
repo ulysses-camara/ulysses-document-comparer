@@ -12,6 +12,7 @@ import base64
 from cryptography.fernet import Fernet
 from sqlalchemy import create_engine
 
+from time import time
 
 def table_name(name):
     return "".join([c if c.isalnum() else "_" for c in name])
@@ -76,14 +77,28 @@ def load_solicitacoes():
 
 
 # Loading data
-print("Loading corpus...")
+print("Carregando proposições da base de dados...")
+start_time = time()
 (codes, names, ementas, tokenized_corpus) = load_corpus()
+print(f'Tempo de carga da base de dados (proposições): {round(time()-start_time, 2)} s.')
+
+print("Carregando solicitações da base de dados...")
+start_time = time()
 (codes_sts, names_sts, texto_sts, tokenized_sts) = load_solicitacoes()
+print(f'Tempo de carga da base de dados (solicitações): {round(time()-start_time, 2)} s.')
 
 # Loading model with dataset
+print('Carregando BM25L para proposições...')
+start_time = time()
 model = BM25L(tokenized_corpus)
+print(f'Tempo de carga BM25L (proposições): {round(time()-start_time, 2)} s.')
+
+print('Carregando BM25L para solicitações...')
+start_time = time()
 model_st = BM25L(tokenized_sts)
-print("Modelos carregados com sucesso")
+print(f'Tempo de carga BM25L (solicitações): {round(time()-start_time, 2)} s.')
+
+print("Modelos carregados com sucesso!", end='\n\n')
 
 def getPastFeedback():
     with db_engine.connect() as conn:
@@ -143,7 +158,7 @@ def getRelationsFromTree(retrieved_doc):
 
 
 @app.route('/', methods=["POST"])
-def lookForSimilar(use_relations_tree = False):
+def lookForSimilar(use_relations_tree=False):
     args = request.json
     try:
         query = args["text"]
@@ -202,7 +217,7 @@ def lookForSimilar(use_relations_tree = False):
     selected_codes_sts, selected_names_sts, selected_sts, scores_sts, scores_sts_normalized, scores_sts_final = retrieveSTs(preprocessed_query, k_st,
                                                                 improve_similarity=improve_similarity, raw_query=query,
                                                                 past_queries=past_queries, past_scores=past_scores,
-                                                                cut = passed_cut, delta = passed_delta)
+                                                                cut=passed_cut, delta=passed_delta)
     resp_results_sts = list()
     for i  in range(k_st):
         resp_results_sts.append({"id": int(selected_codes_sts[i]), "name": selected_names_sts[i], "texto": selected_sts[i].strip(),
@@ -214,7 +229,7 @@ def lookForSimilar(use_relations_tree = False):
     selected_codes, selected_ementas, selected_names, scores, scores_normalized, scores_final = retrieveDocuments(preprocessed_query, k_prop,
                                                                 improve_similarity=improve_similarity, raw_query=query,
                                                                 past_queries=past_queries, past_scores=past_scores,
-                                                                cut = passed_cut, delta = passed_delta)
+                                                                cut=passed_cut, delta=passed_delta)
     resp_results = list()
     if (use_relations_tree):
         for i in range(k_prop):
@@ -378,7 +393,7 @@ def reloadSolicitacoes():
         msg = f"Erro: {str(ex)}"
         print(msg)
         return Response(msg, status=500)
-    return Response(msg, status=200) 
+    return Response(msg, status=200)
 
 
 if __name__=="__main__":
