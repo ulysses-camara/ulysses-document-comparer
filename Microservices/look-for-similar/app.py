@@ -217,7 +217,7 @@ def lookForSimilar(use_relations_tree=False):
     selected_codes_sts, selected_names_sts, selected_sts, scores_sts, scores_sts_normalized, scores_sts_final = retrieveSTs(preprocessed_query, k_st,
                                                                 improve_similarity=improve_similarity, raw_query=query,
                                                                 past_queries=past_queries, past_scores=past_scores,
-                                                                cut=passed_cut, delta=passed_delta)
+                                                                passed_cut=passed_cut, passed_delta=passed_delta)
     resp_results_sts = list()
     for i  in range(k_st):
         resp_results_sts.append({"id": int(selected_codes_sts[i]), "name": selected_names_sts[i], "texto": selected_sts[i].strip(),
@@ -229,7 +229,7 @@ def lookForSimilar(use_relations_tree=False):
     selected_codes, selected_ementas, selected_names, scores, scores_normalized, scores_final = retrieveDocuments(preprocessed_query, k_prop,
                                                                 improve_similarity=improve_similarity, raw_query=query,
                                                                 past_queries=past_queries, past_scores=past_scores,
-                                                                cut=passed_cut, delta=passed_delta)
+                                                                passed_cut=passed_cut, passed_delta=passed_delta)
     resp_results = list()
     if (use_relations_tree):
         for i in range(k_prop):
