@@ -6,7 +6,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 DEFAULT_CUT = 0.4
-DEFAULT_DELTA = 0.1
+DEFAULT_DELTA = 0.2
+DEFAULT_PESO_POUCO_RELEVANTES = 0.5
 
 class BM25:
     def __init__(self, corpus, tokenizer=None):
@@ -75,7 +76,7 @@ class BM25:
 
     def get_top_n(self, query, documents, n=5, 
                     improve_similarity=False, raw_query=None, past_queries=[], 
-                    retrieved_docs=[], names=[], cut=DEFAULT_CUT, delta=DEFAULT_DELTA):
+                    retrieved_docs=[], names=[], cut=DEFAULT_CUT, delta=DEFAULT_DELTA, peso_pouco_relevantes=DEFAULT_PESO_POUCO_RELEVANTES):
 
         assert self.corpus_size == len(documents), "The documents given don't match the index corpus"
 
@@ -89,7 +90,7 @@ class BM25:
         if (improve_similarity):
             try:
                 lambdas = self._lambda_calc(all_queries=past_queries, retrieved_docs=retrieved_docs,
-                                            query=raw_query, cut=cut, delta=delta)
+                                            query=raw_query, cut=cut, delta=delta, peso_pouco_relevantes=peso_pouco_relevantes)
                 scores_final = self._lambda_update(scores=scores_normalized, lambdas=lambdas, names=names)
             except:
                 print("Error calculating lambdas. If there are no past feedbacks yet ignore this message.", flush=True)
@@ -162,7 +163,7 @@ class BM25L(BM25):
                 result[i] += lambdas[name]
         return result
 
-    def _lambda_calc(self, all_queries, retrieved_docs, query, cut, delta):
+    def _lambda_calc(self, all_queries, retrieved_docs, query, cut, delta, peso_pouco_relevantes):
         """
         Searches for similar queries; returns dictionary
         """
@@ -179,9 +180,12 @@ class BM25L(BM25):
             sim = tuple[1]
             for doc in tuple[0]:
                 (name, score, score_norm, relevance) = doc
-                rel = 1
                 if (relevance == 'i'):
                     rel = -1
+                elif (relevance == 'pr'):
+                    rel = peso_pouco_relevantes
+                else:
+                    rel = 1
 
                 if (name in dic):
                     dic[name] += score_norm * sim * rel
@@ -194,7 +198,7 @@ class BM25L(BM25):
 
     def get_top_n(self, query, documents, n=5,
                   improve_similarity=False, raw_query=None, past_queries=[],
-                  retrieved_docs=[], names=[], cut=0.6, delta=0.7):
+                  retrieved_docs=[], names=[], cut=0.4, delta=0.2, peso_pouco_relevantes=1.0):
 
         assert self.corpus_size == len(documents), "The documents given don't match the index corpus"
 
@@ -209,7 +213,7 @@ class BM25L(BM25):
         scores_final = np.copy(scores_normalized)
         if (improve_similarity and len(past_queries) > 0):
             lambdas = self._lambda_calc(all_queries=past_queries, retrieved_docs=retrieved_docs,
-                                        query=raw_query, cut=cut, delta=delta)
+                                        query=raw_query, cut=cut, delta=delta, peso_pouco_relevantes=peso_pouco_relevantes)
             scores_final = self._lambda_update(scores=scores_normalized, lambdas=lambdas, names=names)
 
         top_n = np.argpartition(scores_final, -n)[::-1][:n]
