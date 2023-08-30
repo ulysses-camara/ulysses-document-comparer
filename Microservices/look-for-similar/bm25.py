@@ -198,7 +198,7 @@ class BM25L(BM25):
 
     def get_top_n(self, query, documents, n=5,
                   improve_similarity=False, raw_query=None, past_queries=[],
-                  retrieved_docs=[], names=[], cut=0.4, delta=0.2, peso_pouco_relevantes=1.0):
+                  retrieved_docs=[], names=[], cut=0.4, delta=0.2, peso_pouco_relevantes=0.5):
 
         assert self.corpus_size == len(documents), "The documents given don't match the index corpus"
 
