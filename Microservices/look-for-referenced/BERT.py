@@ -2,11 +2,11 @@ from transformers import AutoTokenizer, AutoModelForTokenClassification
 import torch
 
 class BERT():
-    def __init__(self, model_path:str)->None:
+    def __init__(self)->None:
+        pass
+    def set_model_file(self, model_file:str)->None:
         self.tokenizer = AutoTokenizer.from_pretrained(model_path)
         self.model = AutoModelForTokenClassification.from_pretrained(model_path)
-    def set_model_file(self, model_file:str)->None:
-        pass
     def return_entities(self, tokens:list)->list:
         inputs = self.tokenizer(
             tokens,
