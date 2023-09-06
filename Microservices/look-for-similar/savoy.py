@@ -1,58 +1,7 @@
+from unidecode import unidecode
+
+
 class Savoy:
-
-    def __removeAllPTAccent(self, old_word):
-        word = list(old_word)
-        len_word = len(word)-1
-        for i in range(len_word, -1, -1):
-            if word[i] == 'ä':
-                word[i] = 'a'
-            if word[i] == 'â':
-                word[i] = 'a'
-            if word[i] == 'à':
-                word[i] = 'a'
-            if word[i] == 'á':
-                word[i] = 'a'
-            if word[i] == 'ã':
-                word[i] = 'a'
-            if word[i] == 'ê':
-                word[i] = 'e'
-            if word[i] == 'é':
-                word[i] = 'e'
-            if word[i] == 'è':
-                word[i] = 'e'
-            if word[i] == 'ë':
-                word[i] = 'e'
-            if word[i] == 'ï':
-                word[i] = 'i'
-            if word[i] == 'î':
-                word[i] = 'i'
-            if word[i] == 'ì':
-                word[i] = 'i'
-            if word[i] == 'í':
-                word[i] = 'i'
-            if word[i] == 'ü':
-                word[i] = 'u'
-            if word[i] == 'ú':
-                word[i] = 'u'
-            if word[i] == 'ù':
-                word[i] = 'u'
-            if word[i] == 'û':
-                word[i] = 'u'
-            if word[i] == 'ô':
-                word[i] = 'o'
-            if word[i] == 'ö':
-                word[i] = 'o'
-            if word[i] == 'ó':
-                word[i] = 'o'
-            if word[i] == 'ò':
-                word[i] = 'o'
-            if word[i] == 'õ':
-                word[i] = 'o'
-            if word[i] == 'ç':
-                word[i] = 'c'
-
-        new_word = "".join(word)
-        return new_word
 
     def __finalVowelPortuguese(self, word):
         len_word = len(word)
@@ -66,7 +15,8 @@ class Savoy:
         len_word = len(word)
 
         if len_word > 3:
-            if word[-1] == 's' and word[-2] == 'e' and (word[-3] == 'r' or word[-3] == 's' or word[-3] == 'z' or word[-3] == 'l'):
+            if word[-1] == 's' and word[-2] == 'e' and (
+                    word[-3] == 'r' or word[-3] == 's' or word[-3] == 'z' or word[-3] == 'l'):
                 word = word[:-2]
                 return word
         if len_word > 2:
@@ -233,7 +183,6 @@ class Savoy:
             word = self.__remove_PTsuffix(word)
             word = self.__normFemininPortuguese(word)
             word = self.__finalVowelPortuguese(word)
-            word = self.__removeAllPTAccent(word)
+            word = unidecode(word)
 
         return word
-
