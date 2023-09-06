@@ -1,0 +1,2 @@
+O modelo usado pelo LookForReferenced encontra-se no Drive do projeto: 03-USP-ULYSSES-DOCUMENT-ANALYZER/2023/EXPANSAO_QUERY/modelos e é o arquivo pl_st_c_model.zip (modelo baseado em BERTikal treinado em dataset contendo projetos de lei, solicitação de serviços e comentários).
+Esse arquivo deve ser baixado, extraído e a pasta gerada (pl_st_c_model) deve ser adicionada manualmente a este diretório que contém o código-fonte BERT.py.
