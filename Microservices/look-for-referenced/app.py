@@ -4,11 +4,13 @@ from flask import Flask, request, jsonify
 from CRF import CRF
 from BERT import BERT
 
+MODEL_PATH = "pl_st_c_model"
+
 app = Flask(__name__)
 
 ner_model = BERT()
 try:
-    ner_model.set_model_file("pl_st_c_model")
+    ner_model.set_model_file(MODEL_PATH)
 except Exception as ex:
     traceback.print_exc()
 
