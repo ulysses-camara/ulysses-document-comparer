@@ -2,17 +2,16 @@ import os
 from ast import literal_eval
 import json
 import requests
-import csv
-from io import StringIO
 from flask import Flask, request, jsonify, Response
 from numpy import transpose, array
-from bm25 import BM25L, DEFAULT_CUT, DEFAULT_DELTA
+from bm25 import BM25L, DEFAULT_CUT, DEFAULT_DELTA, DEFAULT_PESO_POUCO_RELEVANTES
 from preprocessing import preprocess
 import base64
 from cryptography.fernet import Fernet
 from sqlalchemy import create_engine
 
 from time import time
+
 
 def table_name(name):
     return "".join([c if c.isalnum() else "_" for c in name])
@@ -30,9 +29,6 @@ db_engine = create_engine(db_connection)
 
 SELECT_CORPUS = f"SELECT code, name, txt_ementa, text_preprocessed FROM {tb_corpus};"
 SELECT_ST_FIELDS = f"SELECT code, name, text, text_preprocessed FROM {tb_solicitacoes};"
-INSERT_DATA_CORPUS = "INSERT INTO " + tb_corpus + " (code, name, txt_ementa, text, text_preprocessed) VALUES ('{}','{}','{}','{}','{}');"
-SELECT_ROOT_BY_PROPOSICAO = "SELECT cod_proposicao_raiz FROM arvore_proposicoes WHERE cod_proposicao = {}"
-SELECT_ARVORE_BY_RAIZ = "SELECT * FROM arvore_proposicoes WHERE cod_proposicao_raiz IN {}"
 SELECT_FEEDBACK = f"SELECT query, user_feedback FROM {tb_feedback};"
 
 INSERT_DATA_ST = "INSERT INTO " + tb_solicitacoes + " (name, text, text_preprocessed) VALUES ('{}','{}','{}');"
@@ -80,25 +76,26 @@ def load_solicitacoes():
 print("Carregando proposições da base de dados...")
 start_time = time()
 (codes, names, ementas, tokenized_corpus) = load_corpus()
-print(f'Tempo de carga da base de dados (proposições): {round(time()-start_time, 2)} s.')
+print(f'Tempo de carga da base de dados (proposições): {round(time() - start_time, 2)} s.')
 
 print("Carregando solicitações da base de dados...")
 start_time = time()
 (codes_sts, names_sts, texto_sts, tokenized_sts) = load_solicitacoes()
-print(f'Tempo de carga da base de dados (solicitações): {round(time()-start_time, 2)} s.')
+print(f'Tempo de carga da base de dados (solicitações): {round(time() - start_time, 2)} s.')
 
 # Loading model with dataset
 print('Carregando BM25L para proposições...')
 start_time = time()
 model = BM25L(tokenized_corpus)
-print(f'Tempo de carga BM25L (proposições): {round(time()-start_time, 2)} s.')
+print(f'Tempo de carga BM25L (proposições): {round(time() - start_time, 2)} s.')
 
 print('Carregando BM25L para solicitações...')
 start_time = time()
 model_st = BM25L(tokenized_sts)
-print(f'Tempo de carga BM25L (solicitações): {round(time()-start_time, 2)} s.')
+print(f'Tempo de carga BM25L (solicitações): {round(time() - start_time, 2)} s.')
 
 print("Modelos carregados com sucesso!", end='\n\n')
+
 
 def getPastFeedback():
     with db_engine.connect() as conn:
@@ -111,54 +108,42 @@ def getPastFeedback():
     scores = []
     all_queries = []
     for entry, q in zip(feedbacks, queries):
-        scores.append([[i["id"], float(i["score"]), float(i["score_normalized"]), i["class"]] for i in entry]) #if i["class"]!='i'])
+        scores.append([[i["id"], float(i["score"]), float(i["score_normalized"]), i["class"]] for i in
+                       entry])  # if i["class"]!='i'])
         all_queries.append(q)
     return all_queries, scores
 
-def retrieveDocuments(query, n, raw_query, improve_similarity, past_queries, past_scores, 
-                      passed_cut = DEFAULT_CUT, passed_delta = DEFAULT_DELTA):
+
+def retrieveDocuments(query, n, raw_query, improve_similarity, past_queries, past_scores,
+                      passed_cut=DEFAULT_CUT, passed_delta=DEFAULT_DELTA,
+                      peso_pouco_relevantes=DEFAULT_PESO_POUCO_RELEVANTES):
     indexes = list(range(len(codes)))
-    slice_indexes, scores, scores_normalized, scores_final = model.get_top_n(query, indexes, n=n,
-            improve_similarity=improve_similarity, raw_query= raw_query, past_queries=past_queries,
-            retrieved_docs=past_scores, names=names, cut=passed_cut, delta = passed_delta)
+    slice_indexes, scores, scores_normalized, scores_final = model.get_top_n(
+        query, indexes, n=n, improve_similarity=improve_similarity, raw_query=raw_query, past_queries=past_queries,
+        retrieved_docs=past_scores, names=names, cut=passed_cut, delta=passed_delta,
+        peso_pouco_relevantes=peso_pouco_relevantes)
     selected_codes = codes[slice_indexes]
     selected_ementas = ementas[slice_indexes]
     selected_names = names[slice_indexes]
     return selected_codes, selected_ementas, selected_names, scores, scores_normalized, scores_final
 
+
 def retrieveSTs(query, n, raw_query, improve_similarity, past_queries, past_scores,
-                passed_cut = DEFAULT_CUT, passed_delta = DEFAULT_DELTA):
+                passed_cut=DEFAULT_CUT, passed_delta=DEFAULT_DELTA,
+                peso_pouco_relevantes=DEFAULT_PESO_POUCO_RELEVANTES):
     indexes = list(range(len(names_sts)))
-    slice_indexes, scores, scores_normalized, scores_final = model_st.get_top_n(query, indexes, n=n,
-            improve_similarity=improve_similarity, raw_query= raw_query, past_queries=past_queries,
-            retrieved_docs=past_scores, names=names_sts, cut=passed_cut, delta = passed_delta)
+    slice_indexes, scores, scores_normalized, scores_final = model_st.get_top_n(
+        query, indexes, n=n, improve_similarity=improve_similarity, raw_query=raw_query, past_queries=past_queries,
+        retrieved_docs=past_scores, names=names_sts, cut=passed_cut, delta=passed_delta,
+        peso_pouco_relevantes=peso_pouco_relevantes)
     selected_sts = texto_sts[slice_indexes]
     selected_names = names_sts[slice_indexes]
     selected_codes = codes_sts[slice_indexes]
     return selected_codes, selected_names, selected_sts, scores, scores_normalized, scores_final
 
 
-def getRelationsFromTree(retrieved_doc):
-    with db_engine.connect() as conn:
-        with conn.connection.cursor() as cursor:
-            cursor.execute(SELECT_ROOT_BY_PROPOSICAO.format(retrieved_doc))
-            roots = cursor.fetchall()
-
-            # Considerando que documento seja uma raiz
-            if (len(roots) == 0):
-                roots.append((retrieved_doc,))
-
-            roots = [str(i[0]) for i in roots]
-            cursor.execute(SELECT_ARVORE_BY_RAIZ.format("(%s)" % ",".join(roots)))
-            results = cursor.fetchall()
-            results = list(map(lambda x: {"numero_sequencia": x[0], "nivel": x[1], "cod_proposicao": x[2],
-                                          "cod_proposicao_referenciada": x[3], "cod_proposicao_raiz": x[4],
-                                          "tipo_referencia": x[5]}, results))
-            return results
-
-
 @app.route('/', methods=["POST"])
-def lookForSimilar(use_relations_tree=False):
+def lookForSimilar():
     args = request.json
     try:
         query = args["text"]
@@ -188,7 +173,7 @@ def lookForSimilar(use_relations_tree=False):
             improve_similarity = True
     except:
         improve_similarity = True
-    
+
     try:
         passed_cut = float(args["cut"])
     except:
@@ -214,158 +199,38 @@ def lookForSimilar(use_relations_tree=False):
         past_queries, past_scores = None, None
 
     # Recuperando das solicitações de trabalho
-    selected_codes_sts, selected_names_sts, selected_sts, scores_sts, scores_sts_normalized, scores_sts_final = retrieveSTs(preprocessed_query, k_st,
-                                                                improve_similarity=improve_similarity, raw_query=query,
-                                                                past_queries=past_queries, past_scores=past_scores,
-                                                                passed_cut=passed_cut, passed_delta=passed_delta)
+    selected_codes_sts, selected_names_sts, selected_sts, scores_sts, scores_sts_normalized, scores_sts_final = retrieveSTs(
+        preprocessed_query, k_st,
+        improve_similarity=improve_similarity, raw_query=query,
+        past_queries=past_queries, past_scores=past_scores,
+        passed_cut=passed_cut, passed_delta=passed_delta)
     resp_results_sts = list()
-    for i  in range(k_st):
-        resp_results_sts.append({"id": int(selected_codes_sts[i]), "name": selected_names_sts[i], "texto": selected_sts[i].strip(),
-                    "score": scores_sts[i], "score_normalized": scores_sts_normalized[i],
-                    "score_final": scores_sts_final[i], "tipo": "ST"})
-
+    for i in range(k_st):
+        resp_results_sts.append(
+            {"id": int(selected_codes_sts[i]), "name": selected_names_sts[i], "texto": selected_sts[i].strip(),
+             "score": scores_sts[i], "score_normalized": scores_sts_normalized[i],
+             "score_final": scores_sts_final[i], "tipo": "ST"})
 
     # Recuperando do corpus das proposições
-    selected_codes, selected_ementas, selected_names, scores, scores_normalized, scores_final = retrieveDocuments(preprocessed_query, k_prop,
-                                                                improve_similarity=improve_similarity, raw_query=query,
-                                                                past_queries=past_queries, past_scores=past_scores,
-                                                                passed_cut=passed_cut, passed_delta=passed_delta)
+    selected_codes, selected_ementas, selected_names, scores, scores_normalized, scores_final = retrieveDocuments(
+        preprocessed_query, k_prop,
+        improve_similarity=improve_similarity, raw_query=query,
+        past_queries=past_queries, past_scores=past_scores,
+        passed_cut=passed_cut, passed_delta=passed_delta)
     resp_results = list()
-    if (use_relations_tree):
-        for i in range(k_prop):
-            # Propostas relacionadas pela árvore de proposições
-            relations_tree = getRelationsFromTree(selected_codes[i])
-            resp_results.append({"id": int(selected_codes[i]), "name": selected_names[i],
-                        "texto": selected_ementas[i].strip(), "score": scores[i],
-                        "score_normalized": scores_normalized[i],
-                        "score_final": scores_final[i], "tipo": "PR", "arvore": relations_tree})
-    else:
-        for i in range(k_prop):
-            resp_results.append({"id": int(selected_codes[i]), "name": selected_names[i],
-                        "texto": selected_ementas[i].strip(), "score": scores[i],
-                        "score_normalized": scores_normalized[i],
-                        "score_final": scores_final[i], "tipo": "PR"})
-
+    for i in range(k_prop):
+        resp_results.append({"id": int(selected_codes[i]), "name": selected_names[i],
+                             "texto": selected_ementas[i].strip(), "score": scores[i],
+                             "score_normalized": scores_normalized[i],
+                             "score_final": scores_final[i], "tipo": "PR"})
     response = {"proposicoes": resp_results, "solicitacoes": resp_results_sts, "actual_query": query}
     return jsonify(response)
 
 
-@app.route('/insert', methods=["POST"])
-def insertDocs():
-    content = request.data.decode("utf-8")
-    io = StringIO(content)
-    reader = csv.reader(io, delimiter=',')
-
-    data = [row for row in reader]
-    columns = data[0]
-    data = data[1:]
-
-    try:
-        idx_text = columns.index("text")
-        idx_ementa = columns.index("txt_ementa")
-        idx_code = columns.index("code")
-        idx_name = columns.index("name")
-
-        data = transpose( data )
-
-        text = data[idx_text]
-        txt_ementa = data[idx_ementa]
-        code = data[idx_code]
-        name = data[idx_name]
-        text_preprocessed = ['{' + ','.join(['"'+str(entry)+'"' for entry in preprocess(txt)]) + '}' for txt in text]
-
-        data_insert = transpose( [code, name, txt_ementa, text, text_preprocessed] )
-
-        with db_engine.connect() as conn:
-            with conn.begin():
-                for d in data_insert:
-                    conn.execute(INSERT_DATA_CORPUS.format(*d))
-
-        # Reloading model
-        print("RELOADING...")
-        global model, codes, names, ementas, tokenized_corpus
-        (codes, names, ementas, tokenized_corpus) = load_corpus()
-        model = BM25L(tokenized_corpus)
-        print("RELOAD DONE")
-    except:
-        return Response(status=500)
-
-    return Response(status=201)
-
-
-@app.route('/insert-forced-sts', methods=["POST"]) #inserir planilha sts sem a primeira virgula, antes de name
-def insertForcesDocs():
-    print("FORCIBLY INSERTING DB")
-    content = request.data.decode("utf-8")
-    io = StringIO(content)
-    reader = csv.reader(io, delimiter=',')
-
-    data = [row for row in reader]
-    columns = data[0]
-    data = data[1:]
-
-    try:
-        idx_name = columns.index("name")
-        idx_text = columns.index("text")
-        idx_text_preprocessed = columns.index("text_preprocessed")
-
-        data = transpose( data )
-
-        name = data[idx_name]
-        text = data[idx_text]
-        text_preprocessed = data[idx_text_preprocessed]
-        text_preprocessed = [word.replace("'",'"') for word in text_preprocessed]
-
-
-        data_insert = transpose([name, text, text_preprocessed])
-
-        command = INSERT_DATA_ST_teste
-        flag = False
-        for data in data_insert:
-            if (flag):
-                command = command + ','
-            command = command + '(' + "'" + data[0] + "'" + ',' + "'" + data[1] + "'" + ',' + "'" + data[2] + "'" + ')'
-            if (flag == False):
-                flag = True
-
-        command = command + ';'
-        '''
-        i = 0
-        print(len(data_insert))
-        with connection.cursor() as cursor:
-            for d in data_insert:
-                pendingCommit = True
-                cursor.execute(INSERT_DATA_ST.format(*d))
-                i = i + 1
-                if(i == 99):
-                    connection.commit()
-                    i = 0
-                    pendingCommit = False
-                #print(i)
-            print("AQUI 9")
-            if(pendingCommit):
-                connection.commit()
-            print("AQUI 10")
-        '''
-
-        with db_engine.connect() as conn:
-            with conn.begin():
-                conn.execute(command)
-
-        # Reloading model
-        print("RELOADING...")
-        global codes_sts, names_sts, texto_sts, tokenized_sts, model_st
-        (codes_sts, names_sts, texto_sts, tokenized_sts) = load_solicitacoes()
-        model_st = BM25L(text_preprocessed)
-        print("RELOAD DONE")
-    except:
-        return Response(status=500)
-
-    return Response(status=201)
-
-
 """Recarga das proposições no modelo
 """
+
+
 @app.route('/reload-proposicoes', methods=["GET"])
 def reloadProposicoes():
     try:
@@ -382,6 +247,8 @@ def reloadProposicoes():
 
 """Recarga das solicitações de trabaho no modelo
 """
+
+
 @app.route('/reload-solicitacoes', methods=["GET"])
 def reloadSolicitacoes():
     try:
@@ -396,5 +263,5 @@ def reloadSolicitacoes():
     return Response(msg, status=200)
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, use_reloader=False, port=5000)

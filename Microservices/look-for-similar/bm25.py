@@ -2,12 +2,11 @@ import math
 import numpy as np
 import sys
 from multiprocessing import Pool, cpu_count
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+from improve_similarity import lambda_update, lambda_calc
 
 DEFAULT_CUT = 0.4
 DEFAULT_DELTA = 0.2
-DEFAULT_PESO_POUCO_RELEVANTES = 0.5
+DEFAULT_PESO_POUCO_RELEVANTES = 0.2
 
 class BM25:
     def __init__(self, corpus, tokenizer=None):
@@ -74,31 +73,6 @@ class BM25:
     def get_batch_scores(self, query, doc_ids):
         raise NotImplementedError()
 
-    def get_top_n(self, query, documents, n=5, 
-                    improve_similarity=False, raw_query=None, past_queries=[], 
-                    retrieved_docs=[], names=[], cut=DEFAULT_CUT, delta=DEFAULT_DELTA, peso_pouco_relevantes=DEFAULT_PESO_POUCO_RELEVANTES):
-
-        assert self.corpus_size == len(documents), "The documents given don't match the index corpus"
-
-        scores = self.get_scores(query)
-        try:
-            scores_normalized = (scores - np.min(scores)) / (np.max(scores) - np.min(scores))
-        except:
-            scores_normalized = [0 for i in range(scores)]
-
-        scores_final = None
-        if (improve_similarity):
-            try:
-                lambdas = self._lambda_calc(all_queries=past_queries, retrieved_docs=retrieved_docs,
-                                            query=raw_query, cut=cut, delta=delta, peso_pouco_relevantes=peso_pouco_relevantes)
-                scores_final = self._lambda_update(scores=scores_normalized, lambdas=lambdas, names=names)
-            except:
-                print("Error calculating lambdas. If there are no past feedbacks yet ignore this message.", flush=True)
-                scores_final = scores
-
-        top_n = np.argsort(scores_final)[::-1][:n]
-        return [documents[i] for i in top_n], np.sort(scores)[::-1][:n], np.sort(scores_normalized)[::-1][:n], np.sort(
-            scores_final)[::-1][:n]
 
 #Implementacao do BM25L - adapta parametros para corrigir a preferencia do Okapi por documentos mais curtos
 class BM25L(BM25):
@@ -152,53 +126,10 @@ class BM25L(BM25):
         return score
 
 
-    def _lambda_update(self, scores, lambdas, names):
-        """
-        Updates bm25 scores using the lambdas values
-        """
-        result = np.copy(scores)
-        for i, name in enumerate(names):
-            name = name.strip()
-            if (name in lambdas.keys()):
-                result[i] += lambdas[name]
-        return result
-
-    def _lambda_calc(self, all_queries, retrieved_docs, query, cut, delta, peso_pouco_relevantes):
-        """
-        Searches for similar queries; returns dictionary
-        """
-        vectorizer = TfidfVectorizer()
-        vectorizer.fit(all_queries+[query])
-        vsm_2 = vectorizer.transform(all_queries)
-        vsm_1 = vectorizer.transform([query])
-        similarities = cosine_similarity(vsm_1, vsm_2).tolist()[0]
-
-        doc_sim = [(retrieved_docs[j], similarities[j]) for j in range(len(similarities)) if similarities[j] > cut]
-
-        dic = {}
-        for tuple in doc_sim:
-            sim = tuple[1]
-            for doc in tuple[0]:
-                (name, score, score_norm, relevance) = doc
-                if (relevance == 'i'):
-                    rel = -1
-                elif (relevance == 'pr'):
-                    rel = peso_pouco_relevantes
-                else:
-                    rel = 1
-
-                if (name in dic):
-                    dic[name] += score_norm * sim * rel
-                else:
-                    dic[name] = score_norm * sim * rel # calculando a soma do produto sim*score*rel
-
-        for key in dic:
-            dic[key] = np.log(dic[key] + 1) * delta
-        return dic
-
     def get_top_n(self, query, documents, n=5,
                   improve_similarity=False, raw_query=None, past_queries=[],
-                  retrieved_docs=[], names=[], cut=0.4, delta=0.2, peso_pouco_relevantes=0.5):
+                  retrieved_docs=[], names=[], cut=DEFAULT_CUT, delta=DEFAULT_DELTA,
+                  peso_pouco_relevantes=DEFAULT_PESO_POUCO_RELEVANTES):
 
         assert self.corpus_size == len(documents), "The documents given don't match the index corpus"
 
@@ -212,22 +143,12 @@ class BM25L(BM25):
 
         scores_final = np.copy(scores_normalized)
         if (improve_similarity and len(past_queries) > 0):
-            lambdas = self._lambda_calc(all_queries=past_queries, retrieved_docs=retrieved_docs,
-                                        query=raw_query, cut=cut, delta=delta, peso_pouco_relevantes=peso_pouco_relevantes)
-            scores_final = self._lambda_update(scores=scores_normalized, lambdas=lambdas, names=names)
+            lambdas = lambda_calc(all_queries=past_queries, retrieved_docs=retrieved_docs,
+                                        query=raw_query, cut=cut, delta=delta,
+                                        peso_pouco_relevantes=peso_pouco_relevantes)
+            scores_final = lambda_update(scores=scores_normalized, lambdas=lambdas, names=names)
 
         top_n = np.argpartition(scores_final, -n)[::-1][:n]
         top_n = top_n[np.argsort(scores_final[top_n])[::-1]]
 
         return [documents[i] for i in top_n], [scores[i] for i in top_n], [scores_normalized[i] for i in top_n], [scores_final[i] for i in top_n]
-
-    # Abaixo, desabilitado pois utiliza a estrutura self.doc_freqs, que foi substituída por self.term_freqs e self.term_docs
-    #def get_batch_scores(self, query, doc_ids):
-    #     assert all(di < len(self.doc_freqs) for di in doc_ids)
-    #     score = np.zeros(len(doc_ids))
-    #     doc_len = np.array(self.doc_len)[doc_ids]
-    #     for q in query:
-    #         q_freq = np.array([(self.doc_freqs[di].get(q) or 0) for di in doc_ids])
-    #         score += (self.idf.get(q) or 0) * (q_freq * (self.k1 + 1) /
-    #                                            (q_freq + self.k1 * (1 - self.b + self.b * doc_len / self.avgdl)))
-    #     return score.tolist()
