@@ -6,3 +6,4 @@ pymssql
 python-dotenv
 python-crfsuite
 cryptography
+flask-restx

@@ -5,3 +5,4 @@ psycopg2
 pymssql
 python-dotenv
 python-crfsuite
+flask-restx

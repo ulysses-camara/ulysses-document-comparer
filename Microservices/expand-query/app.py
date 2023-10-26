@@ -6,6 +6,7 @@ import base64
 import requests
 
 from flask import Flask, request, jsonify, Response
+from flask_restx import Api, Resource, fields
 from sqlalchemy import create_engine
 from cryptography.fernet import Fernet
 
@@ -31,7 +32,13 @@ url_look_for_referenced = os.getenv('URL_LOOK_FOR_REFERENCED', default='http://l
 crypt_key = os.getenv('CRYPT_KEY_SOLIC_TRAB', default='')
 net = Fernet(crypt_key.encode()) if crypt_key else None
 
+
 app = Flask(__name__)
+
+api = Api(app, version="1.0", title="API - ExpandQuery", description="Esta documentação refere-se ao microsserviço de expansão de consultas com entidades de referência.", doc='/docs')
+ns = api.namespace('/', description='Operações do ExpandQuery')
+app.config['RESTX_MASK_HEADER'] = False
+app.config['RESTX_MASK_SWAGGER'] = False
 
 print("Microsserviço iniciado com sucesso")
 
@@ -69,32 +76,37 @@ def searchByName(name_parts, label, cursor):
                 query_expansion += ' ' + ' '.join(results)
 
     return query_expansion
-            
 
-@app.route('/', methods=["POST"])
-def queryExpansion():
+query_model = ns.model('Query', {
+    'query': fields.String(required=True, description='Uma requisição, ex., "Gostaria de consultar todos os documentos relacionados a PL XXXX/YYYY".')
+})
+@ns.route('/')
+class queryExpansion(Resource):
+    @ns.doc('root', description='Expande uma requisição, ex., "Gostaria de consultar todos os documentos relacionados a PL XXXX/YYYY".')
+    @ns.expect(query_model)
+    @ns.marshal_with(query_model)
+    def post(self):
+        args = request.json
+        try:
+            query = args["query"]
+            resp = requests.post(url_look_for_referenced, json={"text": query})
+            data = json.loads(resp.content)
+        except:
+            return Response(status=500)
 
-    args = request.json
-    try:
-        query = args["query"]
-        resp = requests.post(url_look_for_referenced, json={"text": query})
-        data = json.loads(resp.content)
-    except:
-        return Response(status=500)
+        #labels de interesse: FUNDlei(?), FUNDapelido(?), FUNDprojetodelei e FUNDsolicitacaotrabalho
+        with db_engine.connect() as conn:
+            with conn.connection.cursor() as cursor:
+                for entity in data["entities"]:
+                    token, label, score = entity[0], entity[1], entity[2]
+                    if label == 'FUNDprojetodelei' or label == 'FUNDsolicitacaotrabalho':
+                        name_parts = re.findall(PL_REGEX, token)
+                        expansion = searchByName(name_parts, label, cursor)
+                        query += " " + expansion
+                        query = query.strip()
 
-    #labels de interesse: FUNDlei(?), FUNDapelido(?), FUNDprojetodelei e FUNDsolicitacaotrabalho
-    with db_engine.connect() as conn:
-        with conn.connection.cursor() as cursor:
-            for entity in data["entities"]:
-                token, label, score = entity[0], entity[1], entity[2]
-                if label == 'FUNDprojetodelei' or label == 'FUNDsolicitacaotrabalho':
-                    name_parts = re.findall(PL_REGEX, token)
-                    expansion = searchByName(name_parts, label, cursor)
-                    query += " " + expansion
-                    query = query.strip()
-
-    resp = {'query': query}
-    return jsonify(resp)
+        resp = {'query': query}
+        return jsonify(resp)
 
 
 if __name__=="__main__":
