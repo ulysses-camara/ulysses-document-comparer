@@ -9,22 +9,13 @@ from preprocessing import preprocess
 import base64
 from cryptography.fernet import Fernet
 from sqlalchemy import create_engine
-
-from time import time
-
-
-def table_name(name):
-    return "".join([c if c.isalnum() else "_" for c in name])
-
+from config_data import tb_corpus, tb_solicitacoes, tb_feedback
 
 session = requests.Session()
 session.trust_env = False
 crypt_key = os.getenv('CRYPT_KEY_SOLIC_TRAB', default='')
 url_expand_query = os.getenv('URL_EXPAND_QUERY', default='http://expand-query:5003')
 db_connection = os.getenv('ULYSSES_DB_CONNECTION', default='postgresql+psycopg2://admin:admin@localhost/admin')
-tb_corpus = table_name(os.getenv('TB_CORPUS', default='corpus'))
-tb_solicitacoes = table_name(os.getenv('TB_SOLICITACOES', default='solicitacoes'))
-tb_feedback = table_name(os.getenv('TB_FEEDBACK', default='feedback'))
 db_engine = create_engine(db_connection)
 
 SELECT_CORPUS = f"SELECT code, name, txt_ementa, text_preprocessed FROM {tb_corpus};"
@@ -227,12 +218,10 @@ def lookForSimilar():
     return jsonify(response)
 
 
-"""Recarga das proposições no modelo
-"""
-
-
 @app.route('/reload-proposicoes', methods=["GET"])
 def reloadProposicoes():
+    """Recarga das proposições no modelo
+    """
     try:
         global model, codes, names, ementas, tokenized_corpus
         (codes, names, ementas, tokenized_corpus) = load_corpus()
@@ -245,12 +234,10 @@ def reloadProposicoes():
     return Response(msg, status=200)
 
 
-"""Recarga das solicitações de trabaho no modelo
-"""
-
-
 @app.route('/reload-solicitacoes', methods=["GET"])
 def reloadSolicitacoes():
+    """Recarga das solicitações de trabaho no modelo
+    """
     try:
         global codes_sts, names_sts, texto_sts, tokenized_sts, model_st
         (codes_sts, names_sts, texto_sts, tokenized_sts) = load_solicitacoes()
@@ -261,6 +248,80 @@ def reloadSolicitacoes():
         print(msg)
         return Response(msg, status=500)
     return Response(msg, status=200)
+
+
+@app.route('/get-models-metadata', methods=["GET"])
+def getModelsMetadata():
+    """ Recupera metadados dos modelos
+    """
+
+    global model, model_st
+
+    model_size = model.corpus_size
+    model_st_size = model_st.corpus_size
+
+    msg = f"Tamanho do modelo (proposições): {model_size}\nTamanho do modelo (solicitações): {model_st_size}\n"
+
+    return Response(msg, status=200)
+
+
+@app.route('/run-metrics', methods=["GET"])
+def runMetrics():
+    """ Calcula as métricas em um período de tempo
+    """
+
+    import re
+
+    from dateutil import parser
+    from metrics.metrics_utils import run_metrics
+    from datetime import date
+    from json import dumps
+
+    dat_pattern = r'^\d{4}-\d{1,2}-\d{1,2}$'  # padrão da data = 'AAAA-MM-DD'
+
+    dat_inicio = request.args.get("dat_inicio", None)
+    dat_fim = request.args.get("dat_fim", None)
+
+    # Verifica a validade das datas
+    dt_inicio = None;
+    dt_fim = None
+    for i, dat in enumerate([dat_inicio, dat_fim]):
+        if dat:
+            if re.match(dat_pattern, dat):
+                try:
+                    parsed_dat = parser.parse(dat)
+                except:
+                    msg = f"A data '{dat}' não é uma data válida."
+                    error = json.dumps({'error': msg})
+                    return Response(error, status=400, mimetype='application/json')
+                    #
+                if i == 0:
+                    dt_inicio = parsed_dat
+                else:
+                    dt_fim = parsed_dat
+            else:
+                msg = f"Formato da data '{dat}' incorreto: deve estar no padrão AAAA-MM-DD."
+                error = json.dumps({'error': msg})
+                return Response(error, status=400, mimetype='application/json')
+
+                # Erro: data de início maior que data final
+    if dt_inicio and dt_fim:
+        if dt_inicio > dt_fim:
+            msg = "A data de início não pode ser maior do que a data final."
+            error = json.dumps({'error': msg})
+            return Response(error, status=400, mimetype='application/json')
+
+            # Trata data == None
+    if not dat_inicio:
+        dat_inicio = '1901-01-01'
+    if not dat_fim:
+        dat_today = date.today()
+        dat_fim = f'{dat_today.year}-{dat_today.month}-{dat_today.day}'
+
+    period = (dat_inicio, dat_fim)
+    res = run_metrics(db_engine.connect(), period)
+
+    return dumps(res)
 
 
 if __name__ == "__main__":
