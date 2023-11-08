@@ -266,12 +266,8 @@ def run_metrics(db_connection, period: Tuple[str]):
 
         if len(lst_metricas) == 0:
             return {'valor': None, 'incerteza': None}
-        
-        return {'valor': np.mean(lst_metricas), 'incerteza': np.mean(lst_incertezas)}
 
-        # TODO: revisar média das incertezas
-        # 0.80 +/- 0.04    => de 0.76 até 0.84
-        # 0.90 +/- 0.08    => de 0.82 até 0.98
+        return {'valor': np.mean(lst_metricas), 'incerteza': np.mean(lst_incertezas)}
 
 
     #### Proposições ####
