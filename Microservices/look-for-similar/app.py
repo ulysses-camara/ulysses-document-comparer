@@ -10,6 +10,7 @@ import base64
 from cryptography.fernet import Fernet
 from sqlalchemy import create_engine
 from config_data import tb_corpus, tb_solicitacoes, tb_feedback
+from time import time
 
 session = requests.Session()
 session.trust_env = False

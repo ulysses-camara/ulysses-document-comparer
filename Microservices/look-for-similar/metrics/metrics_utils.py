@@ -324,17 +324,6 @@ def run_metrics(db_connection, period: Tuple[str]):
     # Retorno dos Resultados #
     ##########################
 
-    # # tratamento de valores NaN nos dicionários de retorno
-    # def replace_na(dict_: dict):
-    #     for key, value in dict_.items():
-    #         if type(value) is dict:
-    #             replace_na(value)
-    #         elif pd.isna(value):
-    #             dict_[key] = None
-    # #
-    # replace_na(mean_pr)
-    # replace_na(mean_st)
-
     results = {'Dat_execucao': str(date.today()), 'Periodo': {'Dat_inicio': period[0], 'Dat_fim': period[1]}}
     if mean_pr != {}:
         results['Proposicoes'] = mean_pr
