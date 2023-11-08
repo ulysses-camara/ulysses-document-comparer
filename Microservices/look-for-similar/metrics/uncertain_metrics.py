@@ -42,8 +42,6 @@ def recall_k(feedbacks: str, n_relevant_docs: float, k: int):
 
     if not feedbacks:
         return (None, None)
-    if n_relevant_docs == 0.0:
-        return (0.0, 0.0)
 
     # cálculo sem incerteza
     qtd_hifen = feedbacks.count("-")
@@ -68,8 +66,6 @@ def average_precision(feedbacks: str, n_relevant_docs: float):
 
     if not feedbacks:
         return (None, None)
-    if n_relevant_docs == 0.0:
-        return (0.0, 0.0)
 
     # cálculo sem incerteza
     qtd_hifen = feedbacks.count("-")
@@ -95,8 +91,6 @@ def r_precision(feedbacks: str, n_relevant_docs: float):
 
     if not feedbacks:
         return (None, None)
-    if n_relevant_docs == 0.0:
-        return (0.0, 0.0)
 
     # cálculo sem incerteza
     qtd_hifen = feedbacks.count("-")
