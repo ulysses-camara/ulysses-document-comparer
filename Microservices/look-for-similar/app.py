@@ -3,7 +3,7 @@ from ast import literal_eval
 import json
 import requests
 from flask import Flask, request, jsonify, Response
-from numpy import transpose, array
+from numpy import array
 from bm25 import BM25L, DEFAULT_CUT, DEFAULT_DELTA, DEFAULT_PESO_POUCO_RELEVANTES
 from preprocessing import preprocess
 import base64
@@ -274,7 +274,7 @@ def runMetrics():
     import re
 
     from dateutil import parser
-    from metrics.metrics_utils import run_metrics
+    from metrics_utils import run_metrics
     from datetime import date
     from json import dumps
 

@@ -129,9 +129,9 @@ def run_metrics(db_connection, period: Tuple[str]):
 
     import pandas as pd
 
-    from .uncertain_metrics import precision_k, recall_k, average_precision, r_precision, reciprocal_rank
+    from metrics.uncertain_metrics import precision_k, recall_k, average_precision, r_precision, reciprocal_rank
     from datetime import date
-    from ..config_data import tb_feedback
+    from config_data import tb_feedback
 
     # Selects
     SELECT_FEEDBACKS = f"SELECT id, user_feedback, extra_results FROM {tb_feedback} "
