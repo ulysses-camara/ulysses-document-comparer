@@ -5,6 +5,7 @@ import requests
 from flask import Flask, request, jsonify, Response
 from numpy import array
 from bm25 import BM25L, DEFAULT_CUT, DEFAULT_DELTA, DEFAULT_PESO_POUCO_RELEVANTES
+from sentence_models import Modelo
 from preprocessing import preprocess
 import base64
 from cryptography.fernet import Fernet
@@ -12,6 +13,7 @@ from sqlalchemy import create_engine
 from config_data import tb_corpus, tb_solicitacoes, tb_feedback
 from time import time
 
+todos_modelos_sentenca = ['sentencebert', 'legalbert']
 session = requests.Session()
 session.trust_env = False
 crypt_key = os.getenv('CRYPT_KEY_SOLIC_TRAB', default='')
@@ -78,7 +80,7 @@ print(f'Tempo de carga da base de dados (solicitações): {round(time() - start_
 # Loading model with dataset
 print('Carregando BM25L para proposições...')
 start_time = time()
-model = BM25L(tokenized_corpus)
+modelo_sentenca = Modelo(ementas, names)
 print(f'Tempo de carga BM25L (proposições): {round(time() - start_time, 2)} s.')
 
 print('Carregando BM25L para solicitações...')
@@ -149,6 +151,17 @@ def lookForSimilar():
         k_st = args["num_solicitacoes"]
     except:
         k_st = 20
+    try: # Realizar a busca com um modelo de sentença específico
+        version = args["version"]
+    except:
+        version = None
+    if version!= None and version in todos_modelos_sentenca: # Cadastrar novos modelos aqui, manter o mesmo nome da pasta
+        try:
+            return jsonify({"proposicoes": modelo_sentenca.get_top(k_prop, query, version), "actual_query": query})
+        except Exception as e:
+            return jsonify({"ERROR":f'{e}'})
+    elif  version!= None:
+            return jsonify({"ERROR":f'Modelo não encontrado: {version}'})
     try:
         query_expansion = int(args["expansao"])
         if (query_expansion == 0):
