@@ -32,6 +32,26 @@ Para executar o container com o banco de dados e inicializá-lo.
 bash connect.sh 
 ```
 
+#### 1.1.2 Configuração dos modelos de sentença
+
+Para configurar um novo modelo de sentença, é necessário subir uma arquivo compactado com um nome definido (Ex: ``sentencebert.zip``), para essa pasta no [Google Drive](https://drive.google.com/drive/folders/1--gONA6gQS33KXRJ1iRT8m_3zNb9SOjV), seguindo a seguinte estrutura:
+
+````
+sentencebert.zip
+├───sentencebert
+│   ├───1_Pooling
+│   │   └───config.json
+│   ├───config.json
+│   └───config_sentence_transformers.json
+│   └───modules.json
+│   └───pytorch_model.bin
+│   └───README.md
+...
+````
+
+Depois é necessário inserir o nome do modelo (Ex: sentencebert) como chave no dicionário ``links_dos_modelos`` no arquivo ``sentence_models.py`` e inserir o link do Google Drive como valor. Ao levantar o ambiente, serão realizados o download dos modelos e o processo de encoding de cada um, essa etapa deve demorar conforme a quantidade de modelos incluídos e a quantidade de texto existente na base.
+Além disso, deve ser incluido o nome que foi definido para o modelo (Ex: sentencebert) no arquivo ``app.py``, na lista ``todos_modelos_sentenca``.
+
 ### 1.2 Microsserviços
 
 Estando em execução o banco de acordo com [1.1](#1_1), dentro do diretório `./Microservices` execute:
@@ -132,6 +152,43 @@ Saída:
     ]
 }
 ```
+
+### 3.1.2 Modelos de sentença
+
+Busca utilizando um sentence model através de uma query do usuário e argumentos de opção de saída, retorna as $k$ *PL*s e *Solicitações de Trabalho* mais similares a essa query.  
+
+Executado na porta *5000*.
+
+Entrada:
+
+```json
+{
+    "text": <query>,
+    "num_proposicoes": <k proposições à serem retornadas>,
+    "version": <para utilização do modelo de sentenca, deve ser informado o nome do modelo disponível>
+}
+```
+
+Saída:
+
+```json
+{
+"actual_query": <query>,
+"proposicoes": [
+    {
+        "COD": "PL xxx/xxxx",
+        "Modelo": <nome do modelo de sentença usado na busca>,
+        "cosine_similarity_score": <similaridade do cosseno entre o arquivo e a query>,
+        "index": <id do documento>,
+        "txtEmenta": <texo do docuemento> 
+    },
+    { ... },
+```
+
+* Sugestões de melhorias:
+1. Criar um endpoint específico para os modelos de sentença.
+2. Armazenar os encodings de cada texto para cada um dos modelos de sentença no banco e com índice criado.
+3. Usar o pg_vector para obter os documentos mais similares por meio da distância dos cossenos, diretamente no banco.
 
 ## 3.2 save-relevance-feedback
 
