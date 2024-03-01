@@ -187,7 +187,7 @@ Saída:
 }
 ```
 
-## 3.4 expand-query
+## 3.4 expand-query-ner
 
 Dado uma query de entrada, utiliza as entidades recuperadas pelo microsserviço **look-for-referenced** para expandi-la usando as ementas de *PL*s ou solicitações de trabalho citadas.
 
@@ -214,4 +214,63 @@ Saída:
         (...)
     ]
 }
+```
+
+## 3.5 expand-query-synonym
+
+Dado uma query de entrada, a mesma é expandido adicionando sinônimos das entidades nomeadas identificadas usando recursos da biblioteca Spacy. Os sinônimos em si são obtidos pelo módulo Wordnet da biblioteca NLTK.
+
+Executado na porta *5004*.
+
+Entrada:
+
+```json
+{
+    "query": <query>
+}
+```
+
+Saída:
+
+```json
+{
+     "query": <query expandida>,
+     “entities_synonyms”: [
+        (“plano”, “projeto”),
+        (“planejamento”, “projeto”)
+        (“proposta”, “projeto")
+        (<sinônimo>, <entidade>)
+        (...)
+     ]
+}
+```
+## 3.6 expand-query-pseudofeedback-rm3
+
+Dado uma query de entrada, expande-se a mesma com termos obtidos usando pseudofeedback, via RM3. Para o funcionamento do mesmo, deve-se adicionar a pasta de índices na diretório do microsserviço seguindo as instrução presentes no arquivo readme.txt incluso no mesmo.
+
+Executado na porta *5005*.
+
+Entrada:
+
+```json
+{
+    "query": <query>
+}
+```
+
+Saída:
+
+```json
+SAÍDA
+{
+     "query": <query expandida>,
+     “terms”: [
+        (<termo>, <relevância>),
+        (<termo>, <relevância>),
+        (<termo>, <relevância>),
+        (...)
+   ]
+}
+
+
 ```
