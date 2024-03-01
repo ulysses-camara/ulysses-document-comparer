@@ -1,4 +1,4 @@
-FROM python:3.8.3-slim
+FROM python:3.10.13
 
 WORKDIR /app
 
@@ -11,5 +11,5 @@ RUN pip3 install -r requirements.txt
 
 COPY . .
 
-CMD [ "python3", "-m" , "flask", "run", "--host=0.0.0.0", "--port=5002"]
-EXPOSE 5002
+CMD [ "python3", "-m" , "flask", "run", "--host=0.0.0.0", "--port=5003"]
+EXPOSE 5005

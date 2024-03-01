@@ -4,9 +4,7 @@ import torch
 class BERT():
     def __init__(self)->None:
         pass
-    #The model referenced is default is not in this repository. In order to download it, check the readme file
-    #in the same directory as this file.
-    def set_model_file(self, model_path:str = "/pl_st_c_model")->None:
+    def set_model_file(self, model_file:str)->None:
         self.tokenizer = AutoTokenizer.from_pretrained(model_path)
         self.model = AutoModelForTokenClassification.from_pretrained(model_path)
     def return_entities(self, tokens:list)->list:

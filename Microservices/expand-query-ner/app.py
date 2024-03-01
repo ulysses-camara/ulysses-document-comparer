@@ -93,7 +93,7 @@ def queryExpansion():
                     query += " " + expansion
                     query = query.strip()
 
-    resp = {'query': query}
+    resp = {'query': query, 'entities': data["entities"]}
     return jsonify(resp)
 
 
